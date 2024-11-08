@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Union, Tuple
 
 import tqdm
+import torch
 import numpy as np
 import open3d as o3d
 import pypatchworkpp
@@ -25,8 +26,8 @@ def parse_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="scala3",
-        help="Name of the dataset, default: scala3",
+        default="av2",
+        help="Name of the dataset, default: av2",
     )
     parser.add_argument("--verbose", action="store_true", help="Print verbose messages")
     parser.add_argument(
@@ -44,11 +45,13 @@ class GroundRemoval:
 
         self.patchwork = pypatchworkpp.patchworkpp(params)
 
-        self.data_dir = Path(args.data_root) / args.dataset
+        self.standalone = standalone
         if standalone:
             self.save_dir = Path(args.save_dir) if args.save_dir is not None else None
+            self.data_dir = None
         else:
             self.save_dir = None
+            self.data_dir = Path(args.data_root) / args.dataset
         self.args = args
 
     def _read_pcd(self, pcd_path: Union[str, Path]) -> np.ndarray:
@@ -99,7 +102,7 @@ class GroundRemoval:
 
     def _prep_pone(self, data: np.ndarray) -> np.ndarray:
         """
-        Prepare the point cloud data for the PONE dataset
+        Prepare the point cloud data of the PONE dataset
 
         :param np.ndarray data:
             Point cloud data
@@ -114,7 +117,12 @@ class GroundRemoval:
         """
         Run the ground removal algorithm, save the results as .xyz files
         """
-        if self.args.dataset == "scala3":
+        if self.standalone:
+            raise ValueError("This method is not supported in standalone mode")
+
+        if self.args.dataset == "av2":
+            raise NotImplementedError("Dataset 'av2' not yet supported")
+        elif self.args.dataset == "scala3":
             files = sorted(self.data_dir.glob("*.npz"))
             pcd_count = len(files)
         elif self.args.dataset == "pone":
@@ -142,36 +150,43 @@ class GroundRemoval:
             )
             self._save_xyz(save_name)
 
-    def run_individual_file(self, file_name: str) -> Tuple[np.ndarray, np.ndarray]:
+    def run_individual_file(
+        self, file_path: Union[str, Path]
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Run the ground removal algorithm on a single point cloud file
 
-        :param str file_name:
-            Name of the point cloud file
+        :param Union[str, Path] file_path:
+            Path to the point cloud file
 
-        :return: np.ndarray:
-            Nonground points
+        :return: Tuple[np.ndarray, np.ndarray]:
+            Nonground points, Nonground indices
         """
         if self.args.dataset != "scala3":
             raise ValueError(f"Unsupported dataset: {self.args.dataset}")
 
-        full_pcd = self._read_pcd(self.data_dir / file_name)
+        full_pcd = self._read_pcd(file_path)
         pcd = full_pcd[:, :3]
 
         self.patchwork.estimateGround(pcd)
 
         return self.patchwork.getNonground(), self.patchwork.getNongroundIndices()
 
-    def run_individual_scan(self, pcd: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def run_individual_scan(
+        self, pcd: Union[torch.Tensor, np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Run the ground removal algorithm on a given point cloud data
 
-        :param np.ndarray pcd:
+        :param Union[torch.Tensor, np.ndarray] pcd:
             Point cloud data
 
-        :return: np.ndarray:
-            Nonground points
+        :return: Tuple[np.ndarray, np.ndarray]:
+            Nonground points, Nonground indices
         """
+        if isinstance(pcd, torch.Tensor):
+            pcd = pcd.cpu().numpy()
+
         self.patchwork.estimateGround(pcd)
 
         return self.patchwork.getNonground(), self.patchwork.getNongroundIndices()
