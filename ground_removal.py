@@ -11,6 +11,8 @@ import numpy as np
 import open3d as o3d
 import pypatchworkpp
 
+from utils import load_pcd
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Ground Removal")
@@ -65,10 +67,14 @@ class GroundRemoval:
         :return: np.ndarray:
             Point cloud data
         """
-        if self.args.dataset == "scala3":
-            pcd = np.load(pcd_path, allow_pickle=True)["arr_0"].item()["pc"][:, :3]
+        pcd_data = load_pcd(pcd_path, self.args.dataset)
+
+        if self.args.dataset == "av2":
+            pcd = np.c_[pcd_data["x"], pcd_data["y"], pcd_data["z"]]
+        elif self.args.dataset == "scala3":
+            pcd = pcd_data[:, :3]
         elif self.args.dataset == "pone":
-            pcd = np.load(pcd_path, allow_pickle=True)["scan_list"]
+            pcd = self._prep_pone(pcd_data)
         else:
             raise ValueError(f"Unsupported dataset: {self.args.dataset}")
 
@@ -162,11 +168,7 @@ class GroundRemoval:
         :return: Tuple[np.ndarray, np.ndarray]:
             Nonground points, Nonground indices
         """
-        if self.args.dataset != "scala3":
-            raise ValueError(f"Unsupported dataset: {self.args.dataset}")
-
-        full_pcd = self._read_pcd(file_path)
-        pcd = full_pcd[:, :3]
+        pcd = self._read_pcd(file_path)
 
         self.patchwork.estimateGround(pcd)
 

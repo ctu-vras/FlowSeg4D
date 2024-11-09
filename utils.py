@@ -10,12 +10,15 @@ import pyarrow.feather as feather
 from matplotlib import pyplot as plt
 
 
-def load_pcd(file_path: Union[Path, str], dataset: str) -> torch.Tensor:
-    if dataset == "waymo":
-        raise NotImplementedError("Waymo dataset not yet supported")  # TODO: Implement
-    elif dataset == "av2":
+def load_pcd(file_path: Union[Path, str], dataset: str) -> np.ndarray:
+    if dataset == "av2":
         pcd = feather.read_feather(file_path)
-        pcd = np.c_[pcd["x"], pcd["y"], pcd["z"]]
+    elif dataset == "waymo":
+        raise NotImplementedError("Waymo dataset not yet supported")  # TODO: Implement
+    elif dataset == "scala3":
+        pcd = np.load(file_path, allow_pickle=True)["arr_0"].item()["pc"][:, :3]
+    elif dataset == "pone":
+        pcd = np.load(file_path, allow_pickle=True)["scan_list"]
     else:
         raise NotImplementedError(f"Dataset {dataset} not supported")
 

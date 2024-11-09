@@ -31,6 +31,10 @@ def parse_args() -> argparse.Namespace:
         "--visualize", action="store_true", help="Visualize the results"
     )
     parser.add_argument("--verbose", action="store_true", help="Print verbose messages")
+    parser.add_argument("--eps", type=float, default=0.5, help="DBSCAN epsilon")
+    parser.add_argument(
+        "--min_points", type=int, default=30, help="DBSCAN minimum points"
+    )
 
     return parser.parse_args()
 
@@ -44,8 +48,7 @@ if __name__ == "__main__":
 
     ground_removal = GroundRemoval(args, standalone=True)
     if args.file is not None:
-        pcd = load_pcd(args.file, args.dataset)
-        pcd, _ = ground_removal.run_individual_scan(pcd)
-        labels = get_clusters(pcd, eps=0.5, min_points=50)
+        pcd, _ = ground_removal.run_individual_file(args.file)
+        labels = get_clusters(pcd, eps=args.eps, min_points=args.min_points)
         if args.visualize:
             visualize_pcd(pcd, labels)
