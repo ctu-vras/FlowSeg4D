@@ -43,11 +43,12 @@ def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
 def quaternion_to_yaw(q: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
     if isinstance(q, torch.Tensor):
         q = q.cpu().numpy()
-    assert q.shape[-1] == 4, "Input tensor must have shape (..., 4)"
+    assert q.shape[-1] == 4, "Input data must have shape (..., 4)"
+
     q = q / np.linalg.norm(q, axis=-1, keepdims=True)
     yaw = np.arctan2(
-        2 * (q[..., 3] * q[..., 2] + q[..., 0] * q[..., 1]),
-        1 - 2 * (q[..., 1] ** 2 + q[..., 2] ** 2),
+        2 * (q[..., 0] * q[..., 3] + q[..., 1] * q[..., 2]),
+        1 - 2 * (q[..., 2] ** 2 + q[..., 3] ** 2),
     )
     return yaw
 
@@ -57,8 +58,8 @@ def get_clusters(
 ) -> np.ndarray:
     if isinstance(pcd_in, torch.Tensor):
         pcd_in = pcd_in.cpu().numpy()
-    assert pcd_in.ndim == 2, "Input tensor must have shape (N, 3)"
-    assert pcd_in.shape[1] == 3, "Input tensor must have shape (N, 3)"
+    assert pcd_in.ndim == 2, "Input data must have shape (N, 3)"
+    assert pcd_in.shape[1] == 3, "Input data must have shape (N, 3)"
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pcd_in)
@@ -72,12 +73,13 @@ def visualize_pcd(
 ) -> None:
     if isinstance(pcd_in, torch.Tensor):
         pcd_in = pcd_in.cpu().numpy()
-    assert pcd_in.ndim == 2, "Input tensor must have shape (N, 3)"
-    assert pcd_in.shape[1] == 3, "Input tensor must have shape (N, 3)"
+    assert pcd_in.ndim == 2, "Input data must have shape (N, 3)"
+    assert pcd_in.shape[1] == 3, "Input data must have shape (N, 3)"
     if labels is not None:
         assert (
             pcd_in.shape[0] == labels.shape[0]
         ), "Number of points must match number of labels"
+
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pcd_in)
     if labels is not None:

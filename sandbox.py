@@ -59,18 +59,23 @@ if __name__ == "__main__":
             visualize_pcd(pcd, labels)
 
         if args.file_box is not None:
+            ego_box = torch.tensor([0, 0, 0, 4.841, 1.834, 1.445, 0])
             boxes = load_boxes(args.file_box, args.dataset)
             timestamp = boxes.iloc[0]["timestamp_ns"]
+
             labels = boxes["category"].unique()
+            labels = np.append(labels, "EGO_VEHICLE")
             colors = plt.get_cmap("tab20")(np.linspace(0, 1, len(labels)))
             legend_handles = [
                 mpatches.Patch(color=colors[i], label=labels[i])
                 for i in range(len(labels))
             ]
+
             for i in range(boxes.shape[0]):
                 box = boxes.iloc[i]
                 if timestamp != box["timestamp_ns"]:
                     timestamp = box["timestamp_ns"]
+                    vis_box_bev(ego_box, colors[-1])
                     plt.title(f"Timestamp: {timestamp}")
                     plt.legend(handles=legend_handles)
                     plt.show()
@@ -79,8 +84,8 @@ if __name__ == "__main__":
                         box["tx_m"],
                         box["ty_m"],
                         box["tz_m"],
-                        box["width_m"],
                         box["length_m"],
+                        box["width_m"],
                         box["height_m"],
                         quaternion_to_yaw(
                             np.array([box["qw"], box["qx"], box["qy"], box["qz"]])
