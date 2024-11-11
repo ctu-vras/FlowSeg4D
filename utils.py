@@ -5,6 +5,7 @@ from typing import Union, Optional
 
 import torch
 import numpy as np
+import pandas as pd
 import open3d as o3d
 import pyarrow.feather as feather
 from matplotlib import pyplot as plt
@@ -23,6 +24,32 @@ def load_pcd(file_path: Union[Path, str], dataset: str) -> np.ndarray:
         raise NotImplementedError(f"Dataset {dataset} not supported")
 
     return pcd
+
+
+def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
+    if dataset == "av2":
+        boxes = feather.read_feather(file_path)
+    elif dataset == "waymo":
+        raise NotImplementedError("Waymo dataset not yet supported")  # TODO: Implement
+    elif dataset == "scala3":
+        raise ValueError("Scala3 dataset does not have boxes")
+    elif dataset == "pone":
+        raise ValueError("Scala3 dataset does not have boxes")
+    else:
+        raise NotImplementedError(f"Dataset {dataset} not supported")
+    return boxes
+
+
+def quaternion_to_yaw(q: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+    if isinstance(q, torch.Tensor):
+        q = q.cpu().numpy()
+    assert q.shape[-1] == 4, "Input tensor must have shape (..., 4)"
+    q = q / np.linalg.norm(q, axis=-1, keepdims=True)
+    yaw = np.arctan2(
+        2 * (q[..., 3] * q[..., 2] + q[..., 0] * q[..., 1]),
+        1 - 2 * (q[..., 1] ** 2 + q[..., 2] ** 2),
+    )
+    return yaw
 
 
 def get_clusters(

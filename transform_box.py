@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def vis_box_bev(box: torch.Tensor, style: str) -> None:
+def vis_box_bev(box: torch.Tensor, color: str) -> None:
     corners = np.array(
         [
             [-box[3] / 2, -box[4] / 2],
@@ -34,7 +34,7 @@ def vis_box_bev(box: torch.Tensor, style: str) -> None:
     corners @= rot_mat.T
     corners += np.array([box[0], box[1]])
     corners = np.vstack([corners, corners[0]])
-    plt.plot(corners[:, 0], corners[:, 1], style)
+    plt.plot(corners[:, 0], corners[:, 1], color=color)
 
 
 def get_box_transform(box1: torch.Tensor, box2: torch.Tensor) -> torch.Tensor:
