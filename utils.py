@@ -75,6 +75,7 @@ def visualize_pcd(
         pcd_in = pcd_in.cpu().numpy()
     assert pcd_in.ndim == 2, "Input data must have shape (N, 3)"
     assert pcd_in.shape[1] == 3, "Input data must have shape (N, 3)"
+    assert pcd_in.shape[0] > 0, "Input data must have at least one point"
     if labels is not None:
         assert (
             pcd_in.shape[0] == labels.shape[0]
@@ -83,9 +84,37 @@ def visualize_pcd(
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pcd_in)
     if labels is not None:
-        colors = plt.get_cmap("tab20")(
-            labels / (labels.max() if labels.max() > 0 else 1)
-        )
+        colors = plt.get_cmap("hsv")(labels / (labels.max() if labels.max() > 0 else 1))
         colors[labels < 0] = 0  # Set noise points to black
         pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
     o3d.visualization.draw_geometries([pcd])
+
+
+def get_points_in_box(pcd: Union[torch.Tensor, np.ndarray], box: np.ndarray):
+    if isinstance(pcd, torch.Tensor):
+        pcd = pcd.cpu().numpy()
+    assert pcd.ndim == 2, "Input data must have shape (N, 3)"
+    assert pcd.shape[1] == 3, "Input data must have shape (N, 3)"
+    assert box.shape == (7,), "Box must have shape (7,)"
+
+    # Get rotation matrix and translation vector
+    rot_mat = np.array(
+        [
+            [np.cos(box[6]), -np.sin(box[6])],
+            [np.sin(box[6]), np.cos(box[6])],
+        ]
+    )
+    translation = np.array([box[0], box[1]])
+
+    # Transform pcd to box frame
+    pcd_r = (pcd[:, :2] - translation) @ rot_mat
+
+    # Get mask of points inside the box
+    mask = (
+        (-box[3] / 2 <= pcd_r[:, 0])
+        & (pcd_r[:, 0] <= box[3] / 2)
+        & (-box[4] / 2 <= pcd_r[:, 1])
+        & (pcd_r[:, 1] <= box[4] / 2)
+    )
+
+    return pcd[mask]

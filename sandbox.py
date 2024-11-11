@@ -12,6 +12,10 @@ import matplotlib.patches as mpatches
 from ground_removal import GroundRemoval
 from transform_box import vis_box_bev
 from utils import visualize_pcd, get_clusters, quaternion_to_yaw, load_boxes
+from utils import get_points_in_box
+
+
+INTEREST_CLASSES_AV2 = ["BOX_TRUCK", "BUS", "LARGE_VEHICLE", "REGULAR_VEHICLE"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,9 +40,9 @@ def parse_args() -> argparse.Namespace:
         "--visualize", action="store_true", help="Visualize the results"
     )
     parser.add_argument("--verbose", action="store_true", help="Print verbose messages")
-    parser.add_argument("--eps", type=float, default=0.5, help="DBSCAN epsilon")
+    parser.add_argument("--eps", type=float, default=0.7, help="DBSCAN epsilon")
     parser.add_argument(
-        "--min_points", type=int, default=30, help="DBSCAN minimum points"
+        "--min_points", type=int, default=10, help="DBSCAN minimum points"
     )
 
     return parser.parse_args()
@@ -78,7 +82,9 @@ if __name__ == "__main__":
                     vis_box_bev(ego_box, colors[-1])
                     plt.title(f"Timestamp: {timestamp}")
                     plt.legend(handles=legend_handles)
+                    plt.scatter(pcd[:, 0], pcd[:, 1], s=1, c="black")
                     plt.show()
+                    exit()
                 box_r = np.array(
                     [
                         box["tx_m"],
@@ -92,6 +98,11 @@ if __name__ == "__main__":
                         ),
                     ]
                 )
+                if box["category"] in INTEREST_CLASSES_AV2:
+                    object_pcd = get_points_in_box(pcd, box_r)
+                    print(f"Object type: {box['category']}")
+                    if object_pcd.shape[0] != 0:
+                        visualize_pcd(object_pcd, None)
                 label = box["category"]
                 color = colors[np.where(labels == label)[0][0]]
                 vis_box_bev(box_r, color)
