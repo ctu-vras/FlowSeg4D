@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import sklearn
+
 from pathlib import Path
 from typing import Union, Optional
 
@@ -7,6 +9,7 @@ import torch
 import numpy as np
 import pandas as pd
 import open3d as o3d
+from nuscenes import NuScenes
 import pyarrow.feather as feather
 from matplotlib import pyplot as plt
 
@@ -38,6 +41,10 @@ def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
     else:
         raise NotImplementedError(f"Dataset {dataset} not supported")
     return boxes
+
+
+def load_nuScenes():
+    raise NotImplementedError("NuScenes dataset not yet supported")  # TODO: Implement
 
 
 def quaternion_to_yaw(q: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
