@@ -43,8 +43,11 @@ def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
     return boxes
 
 
-def load_nuScenes():
-    raise NotImplementedError("NuScenes dataset not yet supported")  # TODO: Implement
+def load_nuScenes(
+    data_root: Union[Path, str], split: str = "mini", verbose: bool = False
+) -> NuScenes:
+    nusc = NuScenes(version=f"v1.0-{split}", dataroot=data_root, verbose=verbose)
+    return nusc
 
 
 def quaternion_to_yaw(q: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
