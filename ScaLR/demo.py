@@ -20,12 +20,12 @@ import random
 import warnings
 import argparse
 import numpy as np
-import utils.transforms as tr
+import ScaLR.utils.transforms as tr
 from waffleiron import Segmenter
 # from utils.metrics import SemSegLoss
 # from utils.finetuner import Finetuner
 # from utils.scheduler import WarmupCosine
-from datasets import LIST_DATASETS, Collate
+from ScaLR.datasets import LIST_DATASETS, Collate
 
 
 # def param_groups_lrd(
@@ -473,14 +473,14 @@ def get_default_parser():
         "--config_pretrain",
         type=str,
         required=False,
-        default='configs/pretrain/WI_768_pretrain.yaml',
+        default='ScaLR/configs/pretrain/WI_768_pretrain.yaml',
         help="Path to config for pretraining",
     )
     parser.add_argument(
         "--config_downstream",
         type=str,
         required=False,
-        default='configs/downstream/nuscenes/WI_768_finetune_100p.yaml',
+        default='ScaLR/configs/downstream/nuscenes/WI_768_finetune_100p.yaml',
         help="Path to model config downstream",
     )
     parser.add_argument(
@@ -492,7 +492,7 @@ def get_default_parser():
     parser.add_argument(
         "--pretrained_ckpt",
         type=str,
-        default='logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/nuscenes/ckpt_last.pth',
+        default='ScaLR/logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/nuscenes/ckpt_last.pth',
         help="Path to pretrained ckpt",
     )
     parser.add_argument(
@@ -692,8 +692,8 @@ if __name__ == "__main__":
     fig.savefig('test.png', dpi=500)
 
     # np.save('samples/pca_features.npy', pca_features)
-    np.save('samples/norm_pca_features.npy', norm_pca_features)
-    np.save('samples/pred1.npy', pred1.detach().cpu().numpy())
-    np.save('samples/pred2.npy', pred2.detach().cpu().numpy())
-    np.save('samples/pts1.npy', pts1.detach().cpu().numpy())
-    np.save('samples/pts2.npy', pts2.detach().cpu().numpy())
+    # np.save('samples/norm_pca_features.npy', norm_pca_features)
+    # np.save('samples/pred1.npy', pred1.detach().cpu().numpy())
+    # np.save('samples/pred2.npy', pred2.detach().cpu().numpy())
+    # np.save('samples/pts1.npy', pts1.detach().cpu().numpy())
+    # np.save('samples/pts2.npy', pts2.detach().cpu().numpy())
