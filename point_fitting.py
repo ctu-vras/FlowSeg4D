@@ -1,21 +1,37 @@
+from typing import Union
+
+import torch
 import numpy as np
 import open3d as o3d
 
 from utils import rot_matrix_from_Euler
 
 
-def icp_transform(source: np.ndarray, sample: np.ndarray, treshold: float = 0.1):
+def icp_transform(
+    source: Union[torch.Tensor, np.ndarray],
+    sample: Union[torch.Tensor, np.ndarray],
+    treshold: float = 0.1,
+):
     """
     ICP transformation between two point clouds
     Parameters
     ----------
-    source: np.ndarray
+    source: torch.Tensor | np.ndarray
         the source point cloud
-    sample: np.ndarray
+    sample: torch.Tensor | np.ndarray
         point cloud to be transformed
     treshold: float
         treshold for convergence
     """
+    if isinstance(source, torch.Tensor):
+        source = source.cpu().numpy()
+    if isinstance(sample, torch.Tensor):
+        sample = sample.cpu().numpy()
+    assert source.ndim == 2, "Source data must have shape (N, 3)"
+    assert source.shape[1] == 3, "Source data must have shape (N, 3)"
+    assert sample.ndim == 2, "Target data must have shape (M, 3)"
+    assert sample.shape[1] == 3, "Target data must have shape (M, 3)"
+
     N = 20
     translate = np.linspace(-2, 2, N)
 
@@ -52,19 +68,30 @@ def icp_transform(source: np.ndarray, sample: np.ndarray, treshold: float = 0.1)
 
 
 def good_match(
-    source: np.ndarray, sample: np.ndarray, icp_result, treshold: float = 0.1
+    source: Union[torch.Tensor, np.ndarray],
+    sample: Union[torch.Tensor, np.ndarray],
+    icp_result,
 ) -> bool:
     """
     Get the good match between two point clouds
     Parameters
     ----------
-    source: np.ndarray
+    source: torch.Tensor | np.ndarray
         the source point cloud
-    sample: np.ndarray
+    sample: torch.Tensor | np.ndarray
         point cloud to be transformed
     icp_result: o3d.pipelines.registration.RegistrationResult
         the result of the ICP transformation
     """
+    if isinstance(source, torch.Tensor):
+        source = source.cpu().numpy()
+    if isinstance(sample, torch.Tensor):
+        sample = sample.cpu().numpy()
+    assert source.ndim == 2, "Source data must have shape (N, 3)"
+    assert source.shape[1] == 3, "Source data must have shape (N, 3)"
+    assert sample.ndim == 2, "Target data must have shape (M, 3)"
+    assert sample.shape[1] == 3, "Target data must have shape (M, 3)"
+
     fitness = icp_result.fitness
     rmse = icp_result.inlier_rmse
 
@@ -91,4 +118,5 @@ def good_match(
     # target_pcd.paint_uniform_color([0, 1, 0])
     # o3d.visualization.draw_geometries([source_pcd, target_pcd])
 
+    # TODO: Set hyperparameters
     return fitness > 0.3 and symetric_distance < 0.4

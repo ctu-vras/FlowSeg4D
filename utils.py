@@ -51,13 +51,14 @@ def load_nuScenes(
     return nusc
 
 
-def quaternion_to_yaw(q: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
-    if isinstance(q, torch.Tensor):
-        q = q.cpu().numpy()
+def quaternion_to_yaw(q: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
+    device = q.device if isinstance(q, torch.Tensor) else "cpu"
+    if isinstance(q, np.ndarray):
+        q = torch.tensor(q, device=device)
     assert q.shape[-1] == 4, "Input data must have shape (..., 4)"
 
-    q = q / np.linalg.norm(q, axis=-1, keepdims=True)
-    yaw = np.arctan2(
+    q = q / torch.norm(q, dim=-1, keepdim=True)
+    yaw = torch.atan2(
         2 * (q[..., 0] * q[..., 3] + q[..., 1] * q[..., 2]),
         1 - 2 * (q[..., 2] ** 2 + q[..., 3] ** 2),
     )
@@ -101,21 +102,27 @@ def visualize_pcd(
     o3d.visualization.draw_geometries([pcd])
 
 
-def get_points_in_box(pcd: Union[torch.Tensor, np.ndarray], box: np.ndarray):
-    if isinstance(pcd, torch.Tensor):
-        pcd = pcd.cpu().numpy()
+def get_points_in_box(
+    pcd: Union[torch.Tensor, np.ndarray], box: Union[torch.Tensor, np.ndarray]
+):
+    device = pcd.device if isinstance(pcd, torch.Tensor) else "cpu"
+    if isinstance(pcd, np.ndarray):
+        pcd = torch.tensor(pcd, device=device)
+    if isinstance(box, np.ndarray):
+        box = torch.tensor(box, device=device)
     assert pcd.ndim == 2, "Input data must have shape (N, 3)"
     assert pcd.shape[1] == 3, "Input data must have shape (N, 3)"
     assert box.shape == (7,), "Box must have shape (7,)"
 
     # Get rotation matrix and translation vector
-    rot_mat = np.array(
+    rot_mat = torch.tensor(
         [
-            [np.cos(box[6]), -np.sin(box[6])],
-            [np.sin(box[6]), np.cos(box[6])],
-        ]
+            [torch.cos(box[6]), -torch.sin(box[6])],
+            [torch.sin(box[6]), torch.cos(box[6])],
+        ],
+        device=device,
     )
-    translation = np.array([box[0], box[1]])
+    translation = torch.tensor([box[0], box[1]], device=device)
 
     # Transform pcd to box frame
     pcd_r = (pcd[:, :2] - translation) @ rot_mat

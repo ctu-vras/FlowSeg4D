@@ -99,7 +99,7 @@ if __name__ == "__main__":
                         # plt.scatter(pcd[:, 0], pcd[:, 1], s=1, c="black")
                         # plt.show()
                         exit()
-                    box_r = np.array(
+                    box_r = torch.tensor(
                         [
                             box["tx_m"],
                             box["ty_m"],
@@ -108,11 +108,13 @@ if __name__ == "__main__":
                             box["width_m"],
                             box["height_m"],
                             quaternion_to_yaw(
-                                np.array([box["qw"], box["qx"], box["qy"], box["qz"]])
+                                torch.tensor(
+                                    [box["qw"], box["qx"], box["qy"], box["qz"]]
+                                )
                             ),
                         ]
                     )
-                    box_r_2 = np.array(
+                    box_r_2 = torch.tensor(
                         [
                             box2["tx_m"],
                             box2["ty_m"],
@@ -121,7 +123,7 @@ if __name__ == "__main__":
                             box2["width_m"],
                             box2["height_m"],
                             quaternion_to_yaw(
-                                np.array(
+                                torch.tensor(
                                     [box2["qw"], box2["qx"], box2["qy"], box2["qz"]]
                                 )
                             ),
