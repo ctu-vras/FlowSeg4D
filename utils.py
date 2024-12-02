@@ -16,7 +16,8 @@ from matplotlib import pyplot as plt
 
 def load_pcd(file_path: Union[Path, str], dataset: str) -> np.ndarray:
     if dataset == "av2":
-        pcd = feather.read_feather(file_path)
+        pcd_data = feather.read_feather(file_path)
+        pcd = np.c_[pcd_data["x"], pcd_data["y"], pcd_data["z"]]
     elif dataset == "waymo":
         raise NotImplementedError("Waymo dataset not yet supported")  # TODO: Implement
     elif dataset == "scala3":
@@ -46,7 +47,7 @@ def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
 def load_nuScenes(
     data_root: Union[Path, str], split: str = "mini", verbose: bool = False
 ) -> NuScenes:
-    nusc = NuScenes(version=f"v1.0-{split}", dataroot=data_root, verbose=verbose)
+    nusc = NuScenes(version=f"v1.0-{split}", dataroot=str(data_root), verbose=verbose)
     return nusc
 
 
@@ -128,3 +129,32 @@ def get_points_in_box(pcd: Union[torch.Tensor, np.ndarray], box: np.ndarray):
     )
 
     return pcd[mask]
+
+
+def rot_matrix_from_Euler(alpha: float, beta: float, gamma: float) -> np.ndarray:
+    """
+    Get the rotation matrix from Euler angles
+    Parameters
+    ----------
+    alpha: float
+        rotation angle around x-axis
+    beta: float
+        rotation angle around y-axis
+    gamma: float
+        rotation angle around z-axis
+    Returns
+    -------
+    np.ndarray
+        rotation matrix
+    """
+    sa, ca = np.sin(alpha), np.cos(alpha)
+    sb, cb = np.sin(beta), np.cos(beta)
+    sg, cg = np.sin(gamma), np.cos(gamma)
+    ret = np.array(
+        [
+            [cb * cg, sa * sb * cg - ca * sg, sa * sg + ca * sb * cg],
+            [cb * sg, ca * cg + sa * sb * sg, ca * sb * sg - sa * cg],
+            [-sb, sa * cb, ca * cb],
+        ]
+    )
+    return ret
