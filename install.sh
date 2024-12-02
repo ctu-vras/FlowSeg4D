@@ -1,6 +1,7 @@
 ##### Load modules on SLURM cluster
-ml PyTorch3D/0.7.1-foss-2021b-CUDA-11.4.1
-ml torchvision/0.13.0-foss-2021b-CUDA-11.4.1
+ml Open3D/0.17.0-foss-2022a-CUDA-11.7.0
+ml torchvision/0.13.1-foss-2022a-CUDA-11.7.0
+ml PyTorch3D/0.7.1-foss-2022a-CUDA-11.7.0
 
 ##### Create a virtual environment
 python3 -m venv unsup3D
@@ -10,8 +11,7 @@ source unsup3D/bin/activate
 pip install torch_scatter
 pip install pyaml tqdm tensorboard nuscenes-devkit pandas transforms3d
 pip install -e WaffleIron/
-
-
+pip install open3d
 
 ##### Download models and install ScaLR
 cd ScaLR
