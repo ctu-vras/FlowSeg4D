@@ -1,0 +1,715 @@
+# Copyright 2024 - Valeo Comfort and Driving Assistance - valeo.ai
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import os
+import yaml
+import torch
+import random
+import warnings
+import argparse
+import numpy as np
+import ScaLR.utils.transforms as tr
+from waffleiron import Segmenter
+# from utils.metrics import SemSegLoss
+# from utils.finetuner import Finetuner
+# from utils.scheduler import WarmupCosine
+from ScaLR.datasets import LIST_DATASETS, Collate
+
+
+# def param_groups_lrd(
+#     model,
+#     weight_decay=0.05,
+#     no_weight_decay_list=[],
+#     layer_decay=0.75,
+#     no_wdecay_skip=False,
+# ):
+#     """
+#     Parameter groups for layer-wise lr decay
+#     Following BEiT: https://github.com/microsoft/unilm/blob/master/beit/optim_factory.py#L58
+#     """
+#     param_group_names = {}
+#     param_groups = {}
+
+#     num_layers = len(model.waffleiron.channel_mix) + 1
+
+#     layer_scales = list(layer_decay ** (num_layers - i) for i in range(num_layers + 1))
+
+#     for n, p in model.named_parameters():
+#         if not p.requires_grad:
+#             continue
+
+#         # no decay: all 1D parameters and model specific ones
+#         if (no_wdecay_skip is False) and (p.ndim == 1 or n in no_weight_decay_list):
+#             g_decay = "no_decay"
+#             this_decay = 0.0
+#         else:
+#             g_decay = "decay"
+#             this_decay = weight_decay
+
+#         layer_id = get_layer_id_for_waffleiron(n, num_layers)
+#         group_name = "layer_%d_%s" % (layer_id, g_decay)
+
+#         if group_name not in param_group_names:
+#             this_scale = layer_scales[layer_id]
+
+#             param_group_names[group_name] = {
+#                 "lr_scale": this_scale,
+#                 "weight_decay": this_decay,
+#                 "params": [],
+#             }
+#             param_groups[group_name] = {
+#                 "lr_scale": this_scale,
+#                 "weight_decay": this_decay,
+#                 "params": [],
+#             }
+
+#         param_group_names[group_name]["params"].append(n)
+#         param_groups[group_name]["params"].append(p)
+
+#     return list(param_groups.values())
+
+
+def get_layer_id_for_waffleiron(name, num_layers):
+    """
+    Assign a parameter with its layer id
+    Similar to BEiT: https://github.com/microsoft/unilm/blob/master/beit/optim_factory.py#L33
+    """
+    if name.startswith("embed"):
+        return 0
+    elif name.startswith("waffleiron.channel_mix"):
+        layer_id = int(name.split(".")[2]) + 1
+        return layer_id
+    elif name.startswith("waffleiron.spatial_mix"):
+        layer_id = int(name.split(".")[2]) + 1
+        return layer_id
+    else:
+        return num_layers
+
+
+def load_model_config(file):
+    with open(file, "r") as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def get_train_augmentations(config):
+
+    list_of_transf = []
+
+    # Two transformations shared across all datasets
+    list_of_transf.append(
+        tr.LimitNumPoints(
+            dims=(0, 1, 2),
+            max_point=config["dataloader"]["max_points"],
+            random=True,
+        )
+    )
+
+    # Optional augmentations
+    for aug_name in config["augmentations"].keys():
+        if aug_name == "rotation":
+            for d in config["augmentations"]["rotation"][0]:
+                list_of_transf.append(tr.Rotation(inplace=True, dim=d))
+        elif aug_name == "flip_xy":
+            list_of_transf.append(tr.RandomApply(tr.FlipXY(inplace=True), prob=2 / 3))
+        elif aug_name == "scale":
+            dims = config["augmentations"]["scale"][0]
+            scale = config["augmentations"]["scale"][1]
+            list_of_transf.append(tr.Scale(inplace=True, dims=dims, range=scale))
+        else:
+            raise ValueError(f"Unknown transformation: {aug_name}.")
+
+    print("List of transformations:", list_of_transf)
+
+    return tr.Compose(list_of_transf)
+
+
+def get_datasets(config, args):
+
+    # Shared parameters
+    kwargs = {
+        "rootdir": args.path_dataset,
+        "input_feat": config["embedding"]["input_feat"],
+        "voxel_size": config["embedding"]["voxel_size"],
+        "num_neighbors": config["embedding"]["neighbors"],
+        "dim_proj": config["waffleiron"]["dim_proj"],
+        "grids_shape": config["waffleiron"]["grids_size"],
+        "fov_xyz": config["waffleiron"]["fov_xyz"],
+    }
+
+    # Get datatset
+    DATASET = LIST_DATASETS.get(args.dataset.lower())
+    if DATASET is None:
+        raise ValueError(f"Dataset {args.dataset.lower()} not available.")
+
+    # Train dataset
+    train_dataset = DATASET(
+        phase="train",
+        # train_augmentations=get_train_augmentations(config),
+        **kwargs,
+    )
+
+    # Validation dataset
+    val_dataset = DATASET(
+        phase="val",
+        **kwargs,
+    )
+
+    return train_dataset, val_dataset
+
+
+def get_dataloader(train_dataset, val_dataset, args):
+
+    # if args.distributed:
+        # train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        # val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
+    # else:
+    train_sampler = None
+    val_sampler = None
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        # shuffle=(train_sampler is None),
+        shuffle=False,
+        num_workers=args.workers,
+        pin_memory=True,
+        sampler=train_sampler,
+        drop_last=True,
+        collate_fn=Collate(),
+    )
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.workers,
+        pin_memory=True,
+        sampler=val_sampler,
+        drop_last=False,
+        collate_fn=Collate(),
+    )
+
+    return train_loader, val_loader, train_sampler
+
+
+# def get_optimizer(parameters, config):
+#     return torch.optim.AdamW(
+#         parameters,
+#         lr=config["optim"]["lr"],
+#         weight_decay=config["optim"]["weight_decay"],
+#     )
+
+
+# def get_scheduler(optimizer, config, len_train_loader):
+#     scheduler = torch.optim.lr_scheduler.LambdaLR(
+#         optimizer,
+#         WarmupCosine(
+#             config["scheduler"]["epoch_warmup"] * len_train_loader,
+#             config["scheduler"]["max_epoch"] * len_train_loader,
+#             config["scheduler"]["min_lr"] / config["optim"]["lr"],
+#         ),
+#     )
+#     return scheduler
+
+
+# def distributed_training(gpu, ngpus_per_node, args, config):
+
+#     # --- Init. distributing training
+#     args.gpu = gpu
+#     if args.gpu is not None:
+#         print(f"Use GPU: {args.gpu} for training")
+#     if args.distributed:
+#         args.rank = args.rank * ngpus_per_node + gpu
+#         torch.distributed.init_process_group(
+#             backend=args.dist_backend,
+#             init_method=args.dist_url,
+#             world_size=args.world_size,
+#             rank=args.rank,
+#         )
+
+#     # --- Build network
+#     model = Segmenter(
+#         input_channels=config["embedding"]["size_input"],
+#         feat_channels=config["waffleiron"]["nb_channels"],
+#         depth=config["waffleiron"]["depth"],
+#         grid_shape=config["waffleiron"]["grids_size"],
+#         nb_class=config["classif"]["nb_class"],
+#         drop_path_prob=config["waffleiron"]["drop_path"],
+#         layer_norm=config["waffleiron"]["layernorm"],
+#     )
+#     if args.pretrained_ckpt != "":
+#         # Load pretrained model
+#         ckpt = torch.load(args.pretrained_ckpt, map_location="cpu")
+#         if ckpt.get("model_points") is not None:
+#             ckpt = ckpt["model_points"]
+#         else:
+#             ckpt = ckpt["model_point"]
+#         new_ckpt = {}
+#         for k in ckpt.keys():
+#             if k.startswith("module"):
+#                 new_ckpt[k[len("module.") :]] = ckpt[k]
+#             else:
+#                 new_ckpt[k] = ckpt[k]
+#         model.classif = torch.nn.Conv1d(
+#             config["waffleiron"]["nb_channels"], config["waffleiron"]["pretrain_dim"], 1
+#         )
+#         model.load_state_dict(new_ckpt)
+
+#     # Re-init. classification layer (always a learnable layer)
+#     classif = torch.nn.Conv1d(
+#         config["waffleiron"]["nb_channels"], config["classif"]["nb_class"], 1
+#     )
+#     torch.nn.init.constant_(classif.bias, 0)
+#     torch.nn.init.constant_(classif.weight, 0)
+#     model.classif = torch.nn.Sequential(
+#         torch.nn.BatchNorm1d(config["waffleiron"]["nb_channels"]),
+#         classif,
+#     )
+
+#     # For linear probing:
+#     # We freeze parameters of backbone, except classification layer
+#     # eval / train mode for batch norm is handled in Finetuner
+#     if args.linprob:
+#         for p in model.parameters():
+#             p.requires_grad = False
+#         for p in model.classif.parameters():
+#             p.requires_grad = True
+
+#     # ---
+#     args.batch_size = config["dataloader"]["batch_size"]
+#     args.workers = config["dataloader"]["num_workers"]
+#     if args.distributed:
+#         # For multiprocessing distributed, DistributedDataParallel constructor
+#         # should always set the single device scope, otherwise,
+#         # DistributedDataParallel will use all available devices.
+#         torch.cuda.set_device(args.gpu)
+#         model.cuda(args.gpu)
+#         # When using a single GPU per process and per
+#         # DistributedDataParallel, we need to divide the batch size
+#         # ourselves based on the total number of GPUs of the current node.
+#         args.batch_size = int(config["dataloader"]["batch_size"] / ngpus_per_node)
+#         args.workers = int(
+#             (config["dataloader"]["num_workers"] + ngpus_per_node - 1) / ngpus_per_node
+#         )
+#         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+#         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+#     elif args.gpu is not None:
+#         # Training on one GPU
+#         torch.cuda.set_device(args.gpu)
+#         model = model.cuda(args.gpu)
+#     else:
+#         # DataParallel will divide and allocate batch_size to all available GPUs
+#         model = torch.nn.DataParallel(model).cuda()
+#     if args.gpu == 0 or args.gpu is None:
+#         print(f"Model:\n{model}")
+#         nb_param = sum([p.numel() for p in model.parameters() if p.requires_grad]) / 1e6
+#         print(f"{nb_param} x 10^6 parameters")
+
+#     # --- Optimizer
+#     if config["optim"]["layer_decay"] is not None:
+#         model_without_ddp = (
+#             model.module if (args.distributed or args.gpu is None) else model
+#         )
+#         print("Apply layer decay")
+#         param_groups = param_groups_lrd(
+#             model_without_ddp,
+#             config["optim"]["weight_decay"],
+#             layer_decay=config["optim"]["layer_decay"],
+#         )
+#         for i in range(len(param_groups)):
+#             param_groups[i]["lr"] = param_groups[i]["lr_scale"] * config["optim"]["lr"]
+#         optim = get_optimizer(param_groups, config)
+#     else:
+#         optim = get_optimizer(model.parameters(), config)
+
+#     # --- Dataset
+#     train_dataset, val_dataset = get_datasets(config, args)
+#     train_loader, val_loader, train_sampler = get_dataloader(
+#         train_dataset, val_dataset, args
+#     )
+
+#     # --- Loss function
+#     loss = SemSegLoss(
+#         config["classif"]["nb_class"],
+#         lovasz_weight=config["loss"]["lovasz"],
+#     ).cuda(args.gpu)
+
+#     # --- Sets the learning rate to the initial LR decayed by 10 every 30 epochs
+#     scheduler = get_scheduler(optim, config, len(train_loader))
+
+#     # --- Training
+#     mng = Finetuner(
+#         model,
+#         loss,
+#         train_loader,
+#         val_loader,
+#         train_sampler,
+#         optim,
+#         scheduler,
+#         config["scheduler"]["max_epoch"],
+#         args.log_path,
+#         args.gpu,
+#         args.world_size,
+#         args.fp16,
+#         LIST_DATASETS.get(args.dataset.lower()).CLASS_NAME,
+#         tensorboard=(not args.eval),
+#         linear_probing=args.linprob,
+#     )
+#     if args.restart:
+#         mng.load_state()
+#     if args.eval:
+#         mng.one_epoch(training=False)
+#     else:
+#         mng.train()
+
+
+# def main(args, config):
+
+#     # --- Fixed args
+#     # Device
+#     args.device = "cuda"
+#     # Node rank for distributed training
+#     args.rank = 0
+#     # Number of nodes for distributed training'
+#     args.world_size = 1
+#     # URL used to set up distributed training
+#     args.dist_url = "tcp://127.0.0.1:4444"
+#     # Distributed backend'
+#     args.dist_backend = "nccl"
+#     # Distributed processing
+#     args.distributed = args.multiprocessing_distributed
+
+#     # Create log directory
+#     os.makedirs(args.log_path, exist_ok=True)
+
+#     # Set seed
+#     if args.seed is not None:
+#         random.seed(args.seed)
+#         np.random.seed(args.seed)
+#         torch.manual_seed(args.seed)
+#         torch.cuda.manual_seed(args.seed)
+#         os.environ["PYTHONHASHSEED"] = str(args.seed)
+
+#     # Test if use only 1 GPU
+#     if args.gpu is not None:
+#         args.gpu = 0
+#         args.distributed = False
+#         args.multiprocessing_distributed = False
+#         warnings.warn(
+#             "You have chosen a specific GPU. This will completely disable data parallelism."
+#         )
+
+#     # Multi-GPU or Not
+#     ngpus_per_node = torch.cuda.device_count()
+#     if args.multiprocessing_distributed:
+#         # Since we have ngpus_per_node processes per node, the total world_size
+#         # needs to be adjusted accordingly
+#         args.world_size = ngpus_per_node * args.world_size
+#         # Use torch.multiprocessing.spawn to launch distributed processes: the
+#         # main_worker process function
+#         torch.multiprocessing.spawn(
+#             distributed_training,
+#             nprocs=ngpus_per_node,
+#             args=(ngpus_per_node, args, config),
+#         )
+#     else:
+#         # Simply call main_worker function
+#         distributed_training(args.gpu, ngpus_per_node, args, config)
+
+
+def get_default_parser():
+    parser = argparse.ArgumentParser(description="Training")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Path to dataset",
+        default="nuscenes",
+    )
+    parser.add_argument(
+        "--path_dataset",
+        type=str,
+        help="Path to dataset",
+        default="/mnt/data/Public_datasets/nuScenes/",
+    )
+    parser.add_argument(
+        "--log_path", type=str, required=False, default='demo_log', help="Path to log folder"
+    )
+    parser.add_argument(
+        "--restart", action="store_true", default=False, help="Restart training"
+    )
+    parser.add_argument(
+        "--seed", default=None, type=int, help="Seed for initializing training"
+    )
+    parser.add_argument(
+        "--gpu", default=None, type=int, help="Set to any number to use gpu 0"
+    )
+    parser.add_argument(
+        "--multiprocessing-distributed",
+        action="store_true",
+        help="Use multi-processing distributed training to launch "
+        "N processes per node, which has N GPUs. This is the "
+        "fastest way to use PyTorch for either single node or "
+        "multi node data parallel training",
+    )
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        default=False,
+        help="Enable autocast for mix precision training",
+    )
+    parser.add_argument(
+        "--config_pretrain",
+        type=str,
+        required=False,
+        default='ScaLR/configs/pretrain/WI_768_pretrain.yaml',
+        help="Path to config for pretraining",
+    )
+    parser.add_argument(
+        "--config_downstream",
+        type=str,
+        required=False,
+        default='ScaLR/configs/downstream/nuscenes/WI_768_finetune_100p.yaml',
+        help="Path to model config downstream",
+    )
+    parser.add_argument(
+        "--eval",
+        action="store_true",
+        default=False,
+        help="Run validation only",
+    )
+    parser.add_argument(
+        "--pretrained_ckpt",
+        type=str,
+        default='ScaLR/logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/nuscenes/ckpt_last.pth',
+        help="Path to pretrained ckpt",
+    )
+    parser.add_argument(
+        "--linprob",
+        action="store_true",
+        default=False,
+        help="Linear probing",
+    )
+
+    return parser
+
+
+if __name__ == "__main__":
+
+    parser = get_default_parser()
+    args = parser.parse_args()
+
+    # Load config files
+    config = load_model_config(args.config_downstream)
+    config_pretrain = load_model_config(args.config_pretrain)
+
+    # Merge config files
+    # Embeddings
+    config["embedding"] = {}
+    config["embedding"]["input_feat"] = config_pretrain["point_backbone"][
+        "input_features"
+    ]
+    config["embedding"]["size_input"] = config_pretrain["point_backbone"]["size_input"]
+    config["embedding"]["neighbors"] = config_pretrain["point_backbone"][
+        "num_neighbors"
+    ]
+    config["embedding"]["voxel_size"] = config_pretrain["point_backbone"]["voxel_size"]
+    # Backbone
+    config["waffleiron"]["depth"] = config_pretrain["point_backbone"]["depth"]
+    config["waffleiron"]["num_neighbors"] = config_pretrain["point_backbone"][
+        "num_neighbors"
+    ]
+    config["waffleiron"]["dim_proj"] = config_pretrain["point_backbone"]["dim_proj"]
+    config["waffleiron"]["nb_channels"] = config_pretrain["point_backbone"][
+        "nb_channels"
+    ]
+    config["waffleiron"]["pretrain_dim"] = config_pretrain["point_backbone"]["nb_class"]
+    config["waffleiron"]["layernorm"] = config_pretrain["point_backbone"]["layernorm"]
+
+    # For datasets which need larger FOV for finetuning...
+    if config["dataloader"].get("new_grid_shape") is not None:
+        # ... overwrite config used at pretraining
+        config["waffleiron"]["grids_size"] = config["dataloader"]["new_grid_shape"]
+    else:
+        # ... otherwise keep default value
+        config["waffleiron"]["grids_size"] = config_pretrain["point_backbone"][
+            "grid_shape"
+        ]
+    if config["dataloader"].get("new_fov") is not None:
+        config["waffleiron"]["fov_xyz"] = config["dataloader"]["new_fov"]
+    else:
+        config["waffleiron"]["fov_xyz"] = config_pretrain["point_backbone"]["fov"]
+
+    # --- Build network
+    model = Segmenter(
+        input_channels=config["embedding"]["size_input"],
+        feat_channels=config["waffleiron"]["nb_channels"],
+        depth=config["waffleiron"]["depth"],
+        grid_shape=config["waffleiron"]["grids_size"],
+        nb_class=config["classif"]["nb_class"],
+        drop_path_prob=config["waffleiron"]["drop_path"],
+        layer_norm=config["waffleiron"]["layernorm"],
+    )
+
+
+    args.batch_size = 2
+    args.workers = 0
+
+    # --- Build nuScenes dataset
+    train_dataset, val_dataset = get_datasets(config, args)
+    trn_loader, val_loader, train_sampler = get_dataloader(train_dataset, val_dataset, args)
+    
+    # Load pretrained model
+    ckpt = torch.load(args.pretrained_ckpt, map_location="cpu")
+    ckpt = ckpt['net']
+    new_ckpt = {}
+    for k in ckpt.keys():
+        if k.startswith("module"):
+            new_ckpt[k[len("module.") :]] = ckpt[k]
+        else:
+            new_ckpt[k] = ckpt[k]
+
+
+    
+    # Adding classification layer
+    model.classif = torch.nn.Conv1d(
+        config["waffleiron"]["nb_channels"], config["waffleiron"]["pretrain_dim"], 1
+    )
+
+    classif = torch.nn.Conv1d(
+        config["waffleiron"]["nb_channels"], config["classif"]["nb_class"], 1
+    )
+    torch.nn.init.constant_(classif.bias, 0)
+    torch.nn.init.constant_(classif.weight, 0)
+    model.classif = torch.nn.Sequential(
+        torch.nn.BatchNorm1d(config["waffleiron"]["nb_channels"]),
+        classif,
+    )
+
+    model.load_state_dict(new_ckpt)
+
+    model = model.cuda()
+    model.eval()
+
+    from tqdm import tqdm
+
+    # --- Example of inference
+    for i, batch in enumerate(trn_loader):
+        
+        # Network inputs
+        feat = batch["feat"].cuda()
+        labels = batch["labels_orig"].cuda()
+        batch["upsample"] = [
+            up.cuda() for up in batch["upsample"]
+        ]
+        cell_ind = batch["cell_ind"].cuda()
+        occupied_cell = batch["occupied_cells"].cuda()
+        neighbors_emb = batch["neighbors_emb"].cuda()
+        net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
+
+        # Get prediction and loss
+        with torch.autocast("cuda"):
+            
+            with torch.no_grad():
+                out, tokens = model(*net_inputs)
+            # Upsample to original resolution
+            out_upsample = []
+            for id_b, closest_point in enumerate(batch["upsample"]):
+                temp = out[id_b, :, closest_point]
+                out_upsample.append(temp.T)
+            # out = torch.cat(out_upsample, dim=0)
+            # Loss
+            
+        # reconstruct point clouds
+        for i in range(batch['feat'].shape[0]):
+            nbr_pts = out_upsample[i].shape[0]    
+            pts = batch['feat'][i, :3, :nbr_pts].T
+            predictions = out_upsample[i].argmax(dim=1)
+            
+            # print(pts.shape)
+
+        break
+
+
+    # box branch 
+    tokens_channels = tokens.shape[1]
+    box_reg = torch.nn.Conv1d(tokens_channels, 7, 1)    # x, y, z, l, w, h, yaw
+    box_reg = box_reg.half().cuda() # float16
+
+    box_features = box_reg(tokens)
+    print('box_features - B x C x N: ', box_features.shape)
+
+    # instance branch
+    K = 20
+    instance_reg = torch.nn.Conv1d(tokens_channels, K, 1)    # K instances
+    instance_reg = instance_reg.half().cuda() # float16
+
+    instance_features = instance_reg(tokens).softmax(dim=1) 
+    instance_class = instance_features.argmax(dim=1)
+    print('instance_features - B x K x N: ', instance_features.shape)
+    
+    # Data augmentations are disabled (commented out in "get_dataloader" function)
+    import matplotlib.pyplot as plt
+    # Define a color map for the predictions
+    colors = plt.cm.get_cmap('tab20', config["classif"]["nb_class"])
+
+    # visualize tokens as PCA projection
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=3)
+    pca.fit(tokens[0].T[:out_upsample[0].shape[0]].cpu().numpy())
+    pca_features = pca.transform(tokens[0].T[:out_upsample[0].shape[0]].cpu().numpy())
+
+    # norm pca_features
+    norm_pca_features = (pca_features - pca_features.min(axis=0)) / (pca_features.max(axis=0) - pca_features.min(axis=0))
+
+    # Transform predictions to discrete colors
+    pred_colors = colors(predictions.cpu().numpy())
+    
+    pts1 = batch['feat'][0, :, :out_upsample[0].shape[0]].T
+    pts2 = batch['feat'][1, :, :out_upsample[1].shape[0]].T
+    pred1 = out_upsample[0].argmax(dim=1)
+    pred2 = out_upsample[1].argmax(dim=1)
+    pred_colors1 = colors(pred1.cpu().numpy())
+    pred_colors2 = colors(pred2.cpu().numpy())
+
+    instance_colors = plt.cm.get_cmap('tab20', K)(instance_class[0, :pts1.shape[0]].cpu().numpy())
+    # instance_colors = instance_class[0, :pts1.shape[0]].detach().cpu().numpy()
+
+    fig, ax = plt.subplots(3,2)
+    ax[0,0].scatter(pts1[:,1], pts1[:,2], c=pred_colors1, s=0.1, marker='.', facecolors=pred_colors)
+    ax[0,1].scatter(pts1[:,1], pts1[:,2], c=norm_pca_features, s=0.1, marker='.', facecolors=norm_pca_features)
+    
+    ax[1,0].scatter(pts1[:,1], pts1[:,2], c=pred_colors1, s=0.1, marker='.', facecolors='r')
+    ax[1,1].scatter(pts2[:,1], pts2[:,2], c=pred_colors2, s=0.1, marker='.', facecolors='r')
+
+    ax[2,0].scatter(pts1[:,1], pts1[:,2], c=instance_colors, s=0.1, marker='.', facecolors='r')
+    ax[2,1].scatter(pts2[:,1], pts2[:,2], c=pred_colors2, s=0.1, marker='.', facecolors='r')
+
+    ax[0,0].axis('equal'), ax[0,1].axis('equal'), ax[1,0].axis('equal'), ax[1,1].axis('equal'), ax[2,0].axis('equal'), ax[2,1].axis('equal')
+
+    ax[0,0].set_title(f'WaffleIron on nuScenes')
+    ax[0,1].set_title(f'PCA projection of {tokens.shape[1]} DINO tokens')
+    ax[1,0].set_title('Frame 1')
+    ax[1,1].set_title('Frame 2')
+    ax[2,0].set_title('Instance segmentation')
+
+    fig.tight_layout()
+    fig.savefig('test.png', dpi=500)
+
+    # np.save('samples/pca_features.npy', pca_features)
+    # np.save('samples/norm_pca_features.npy', norm_pca_features)
+    # np.save('samples/pred1.npy', pred1.detach().cpu().numpy())
+    # np.save('samples/pred2.npy', pred2.detach().cpu().numpy())
+    # np.save('samples/pts1.npy', pts1.detach().cpu().numpy())
+    # np.save('samples/pts2.npy', pts2.detach().cpu().numpy())
