@@ -705,7 +705,7 @@ if __name__ == "__main__":
     ax[2,0].set_title('Instance segmentation')
 
     fig.tight_layout()
-    fig.savefig('test.png', dpi=500)
+    fig.savefig('demo.png', dpi=500)
 
     # np.save('samples/pca_features.npy', pca_features)
     # np.save('samples/norm_pca_features.npy', norm_pca_features)

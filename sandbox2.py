@@ -9,6 +9,8 @@ import ScaLR.utils.transforms as tr
 from waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
+import matplotlib.pyplot as plt
+
 from utils import get_clusters, get_points_in_box, quaternion_to_yaw
 from point_fitting import icp_transform, good_match
 
@@ -296,6 +298,7 @@ if __name__ == "__main__":
 
     box_features = box_reg(tokens)
     print('box_features - B x C x N: ', box_features.shape)
+    # print(box_features[1, :, 0])
 
     # instance branch
     K = 20
@@ -306,12 +309,32 @@ if __name__ == "__main__":
     instance_class = instance_features.argmax(dim=1)
     print('instance_features - B x K x N: ', instance_features.shape)
 
-    # box to point matching
-    pcd = batch["feat"][1, :, :out_upsample[-1].shape[0]].T.cuda()
-    pcd = torch.cat((pcd, instance_class[-1].unsqueeze(1)), axis=1)
+    # box to point matching (dynamic to static)
+    pcd = batch["feat"][-1, :, :out_upsample[-1].shape[0]].T.cuda()
+    pred = out_upsample[1].argmax(dim=1)
+    pcd = torch.cat((pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1)
+    print(pcd[:,0])
+
+    unique_vals, counts = torch.unique(pred, return_counts=True)
+    max_class = unique_vals[torch.argmax(counts)]
+
+    if False:  # visualize waffleiron predictions used for box-point fitting
+        colors = plt.cm.get_cmap('tab20', config["classif"]["nb_class"])
+        pred_colors = colors(pred.cpu().numpy())
+        fig, ax = plt.subplots(1,2)
+        mask = (pred == max_class).cpu().numpy()
+        pts = pcd.cpu().numpy()
+        ax[0].scatter(pts[:,1], pts[:,2], c=pred_colors, s=0.1, marker='.', facecolors='r')
+        ax[1].scatter(pts[mask][:,1], pts[mask][:,2], c=pred_colors[mask], s=0.1, marker='.', facecolors='r')
+
+        ax[0].set_title("Waffleiron predictions")
+        ax[1].set_title(f"Most common class: {int(max_class.data)}")
+
+        fig.tight_layout()
+        fig.savefig('test.png', dpi=500)
 
     box = ...  # TODO: get box features
-    box_r = np.array(
+    box_r = torch.tensor(
         [
             box["tx_m"],
             box["ty_m"],
@@ -319,15 +342,13 @@ if __name__ == "__main__":
             box["length_m"],
             box["width_m"],
             box["height_m"],
-            quaternion_to_yaw(
-                np.array([box["qw"], box["qx"], box["qy"], box["qz"]])
-            ),
+            box["yaw"]
         ]
     )
     # get instance class of points in box
     box_points = get_points_in_box(pcd, box_r)
-    unique_vals, counts = np.unique(box_points[:, -1], return_counts=True)
-    box_class = unique_vals[np.argmax(counts)]
+    unique_vals, counts = torch.unique(box_points[:, -1], return_counts=True)
+    box_class = unique_vals[torch.argmax(counts)]
 
     # get clusters for points of same instance class
     class_pcd = pcd[box_class]
