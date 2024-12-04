@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 
 import torch
 import numpy as np
@@ -11,6 +11,7 @@ def icp_transform(
     source: Union[torch.Tensor, np.ndarray],
     sample: Union[torch.Tensor, np.ndarray],
     treshold: float = 0.1,
+    save_name: Optional[str] = None,
 ):
     """
     ICP transformation between two point clouds
@@ -41,8 +42,11 @@ def icp_transform(
     target_pcd.points = o3d.utility.Vector3dVector(sample - np.mean(sample, axis=0))
     init_transform = np.eye(4)
 
-    # source_pcd.paint_uniform_color([1, 0, 0])
-    # target_pcd.paint_uniform_color([0, 1, 0])
+    source_pcd.paint_uniform_color([1, 0, 0])
+    target_pcd.paint_uniform_color([0, 1, 0])
+    if save_name is not None:
+        merged_pcd = source_pcd + target_pcd
+        o3d.io.write_point_cloud(save_name, merged_pcd)
     # o3d.visualization.draw_geometries([source_pcd, target_pcd])
 
     best_icp_result = None
@@ -71,6 +75,7 @@ def good_match(
     source: Union[torch.Tensor, np.ndarray],
     sample: Union[torch.Tensor, np.ndarray],
     icp_result,
+    save_name: Optional[str] = None,
 ) -> bool:
     """
     Get the good match between two point clouds
@@ -100,7 +105,7 @@ def good_match(
     target_pcd = o3d.geometry.PointCloud()
     target_pcd.points = o3d.utility.Vector3dVector(sample - np.mean(sample, axis=0))
     source_pcd.transform(icp_result.transformation)
-    print(icp_result.transformation)
+    # print(icp_result.transformation)
 
     source_to_target = np.mean(
         np.asarray(source_pcd.compute_point_cloud_distance(target_pcd))
@@ -114,8 +119,11 @@ def good_match(
     print(f"RMSE: {rmse}")
     print(f"Symetric distance: {symetric_distance}")
 
-    # source_pcd.paint_uniform_color([1, 0, 0])
-    # target_pcd.paint_uniform_color([0, 1, 0])
+    source_pcd.paint_uniform_color([1, 0, 0])
+    target_pcd.paint_uniform_color([0, 1, 0])
+    if save_name is not None:
+        merged_pcd = source_pcd + target_pcd
+        o3d.io.write_point_cloud(save_name, merged_pcd)
     # o3d.visualization.draw_geometries([source_pcd, target_pcd])
 
     # TODO: Set hyperparameters

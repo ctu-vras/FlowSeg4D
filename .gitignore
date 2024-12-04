@@ -1,5 +1,6 @@
 *.pyc
 *.png
+*.ply
 
 .DS_Store
 
