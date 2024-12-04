@@ -30,6 +30,11 @@ def load_pcd(file_path: Union[Path, str], dataset: str) -> np.ndarray:
     return pcd
 
 
+def load_pcd_file(file_path: Union[Path, str]) -> o3d.geometry.PointCloud:
+    file = o3d.io.read_point_cloud(file_path)
+    return file
+
+
 def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
     if dataset == "av2":
         boxes = feather.read_feather(file_path)
@@ -81,20 +86,24 @@ def get_clusters(
 
 
 def visualize_pcd(
-    pcd_in: Union[torch.Tensor, np.ndarray], labels: Optional[np.ndarray]
+    pcd_in: Union[torch.Tensor, np.ndarray, o3d.geometry.PointCloud],
+    labels: Optional[np.ndarray] = None,
 ) -> None:
-    if isinstance(pcd_in, torch.Tensor):
-        pcd_in = pcd_in.cpu().numpy()
-    assert pcd_in.ndim == 2, "Input data must have shape (N, 3)"
-    assert pcd_in.shape[1] == 3, "Input data must have shape (N, 3)"
-    assert pcd_in.shape[0] > 0, "Input data must have at least one point"
-    if labels is not None:
-        assert (
-            pcd_in.shape[0] == labels.shape[0]
-        ), "Number of points must match number of labels"
+    if not isinstance(pcd_in, o3d.geometry.PointCloud):
+        if isinstance(pcd_in, torch.Tensor):
+            pcd_in = pcd_in.cpu().numpy()
+        assert pcd_in.ndim == 2, "Input data must have shape (N, 3)"
+        assert pcd_in.shape[1] == 3, "Input data must have shape (N, 3)"
+        assert pcd_in.shape[0] > 0, "Input data must have at least one point"
+        if labels is not None:
+            assert (
+                pcd_in.shape[0] == labels.shape[0]
+            ), "Number of points must match number of labels"
 
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pcd_in)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pcd_in)
+    else:
+        pcd = pcd_in
     if labels is not None:
         colors = plt.get_cmap("hsv")(labels / (labels.max() if labels.max() > 0 else 1))
         colors[labels < 0] = 0  # Set noise points to black
