@@ -87,6 +87,10 @@ def get_default_parser():
         default=False,
         help="Linear probing",
     )
+    parser.add_argument("--eps", type=float, default=2.5, help="DBSCAN epsilon")
+    parser.add_argument(
+        "--min_points", type=int, default=15, help="DBSCAN minimum points"
+    )
 
     return parser
 
@@ -313,10 +317,26 @@ if __name__ == "__main__":
     pcd = batch["feat"][-1, :, :out_upsample[-1].shape[0]].T.cuda()
     pred = out_upsample[1].argmax(dim=1)
     pcd = torch.cat((pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1)
-    print(pcd[:,0])
+    # print(pcd[:,0])
 
     unique_vals, counts = torch.unique(pred, return_counts=True)
     max_class = unique_vals[torch.argmax(counts)]
+
+    if False:
+        for class_id in unique_vals:
+            fig, ax = plt.subplots(1, 2)
+            pts = pcd.cpu().numpy()
+            mask = (pred == class_id).cpu().numpy()
+            labels = get_clusters(pts[mask][:,:3], eps=args.eps, min_points=args.min_points)
+            if class_id == 3:
+                print(labels)
+            colors = plt.cm.get_cmap('tab20', config["classif"]["nb_class"])
+            pred_colors = colors(pred.cpu().numpy())
+            colors = plt.get_cmap("tab20")(labels / (labels.max() if labels.max() > 0 else 1))
+            ax[0].scatter(pts[mask][:,1], pts[mask][:,2], c=pred_colors[mask], s=0.1, marker='.', facecolors='r')
+            ax[1].scatter(pts[mask][:,1], pts[mask][:,2], c=colors, s=0.1, marker='.', facecolors='r')
+            fig.tight_layout()
+            fig.savefig(f"figures/class_{class_id}.png", dpi=500)
 
     if False:  # visualize waffleiron predictions used for box-point fitting
         colors = plt.cm.get_cmap('tab20', config["classif"]["nb_class"])
@@ -332,6 +352,18 @@ if __name__ == "__main__":
 
         fig.tight_layout()
         fig.savefig('test.png', dpi=500)
+
+    pts = pcd.cpu().numpy()
+    mask = (pred == 3).cpu().numpy()
+    labels = get_clusters(pts[mask][:,:3], eps=args.eps, min_points=args.min_points)
+    ground_truth = pts[mask][labels == 0][:,:3]
+    for label in range(1, max(labels)+1):
+        if label == -1:
+            continue
+        sample = pts[mask][labels == label][:,:3]
+        icp_res = icp_transform(ground_truth, sample)
+        is_class = good_match(ground_truth, sample, icp_res, f"exports/cloud_{label}.ply")
+        print(f"Object is same class: {is_class}\n")
 
     box = ...  # TODO: get box features
     box_r = torch.tensor(
