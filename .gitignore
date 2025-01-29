@@ -1,6 +1,9 @@
 *.pyc
 *.png
 *.ply
+*.npy
+*.pdf
+*.out
 
 .DS_Store
 
