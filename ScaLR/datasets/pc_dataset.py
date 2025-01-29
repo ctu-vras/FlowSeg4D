@@ -130,6 +130,9 @@ class PCDataset(Dataset):
     def load_pc(self, index):
         raise NotImplementedError()
 
+    def get_ego_motion(self, index):
+        raise NotImplementedError
+
     def __len__(self):
         raise NotImplementedError()
 
@@ -164,6 +167,14 @@ class PCDataset(Dataset):
         else:
             _, upsample = kdtree.query(pc_orig[:, :3], k=1)
 
+        try:
+            ego_motion = self.get_ego_motion(index)
+        except NotImplementedError:
+            ego_motion = None
+        except Exception as e:
+            print(e)
+            ego_motion = None
+
         # Output to return
         out = (
             # Point features
@@ -178,6 +189,8 @@ class PCDataset(Dataset):
             upsample,
             # Filename of original point cloud
             filename,
+            # Ego motion
+            ego_motion,
         )
 
         return out
@@ -216,7 +229,7 @@ class Collate:
 
         # Extract all data
         list_of_data = (list(data) for data in zip(*list_data))
-        feat, label_orig, cell_ind, neighbors_emb, upsample, filename = list_of_data
+        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion = list_of_data
 
         # Zero-pad point clouds
         Nmax = np.max([f.shape[-1] for f in feat])
@@ -251,6 +264,7 @@ class Collate:
             "cell_ind": cell_ind,
             "occupied_cells": occupied_cells,
             "filename": filename,
+            "ego_motion": ego_motion,
         }
 
         return out
