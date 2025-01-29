@@ -4,10 +4,10 @@
 *.npy
 *.pdf
 *.out
+*.pck
 
 .DS_Store
 
 unsup3D
 
 ScaLR/log
-ScaLR/datasets

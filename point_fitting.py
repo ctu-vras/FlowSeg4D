@@ -53,7 +53,7 @@ def icp_transform(
     for i in range(N):
         for j in range(N):
             for k in range(N):
-                init_transform[:3, 3] = np.array([translate[i], 0, translate[j]])
+                init_transform[:3, 3] = np.array([translate[i], translate[j], 0])
                 init_transform[:3, :3] = rot_matrix_from_Euler(0, 0, k * 2 * np.pi / N)
                 icp_result = o3d.pipelines.registration.registration_icp(
                     source=source_pcd,
@@ -65,6 +65,8 @@ def icp_transform(
                 if (
                     best_icp_result is None
                     or icp_result.fitness > best_icp_result.fitness
+                    # or (icp_result.inlier_rmse < best_icp_result.inlier_rmse and
+                    #     abs(icp_result.fitness - best_icp_result.fitness) < 0.225)
                 ):
                     best_icp_result = icp_result
 

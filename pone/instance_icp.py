@@ -88,7 +88,6 @@ def scatter(src=None, index=None, dim=0, out=None, L=None, dim_size=None, reduce
 
 
 def instance_cross_covariance(pts1, warped_pts1, class_ids, L=None, weighted=None):
-    
     ''' 
     Calculates the cross covariance matrix between two point clouds based on the class ids
     and splits the covariance matrices according to classes
@@ -191,7 +190,6 @@ def transform_pts(pts1, T, id_mask):
     return transformed_pts
 
 def object_aware_icp(pts1, pts2, id_mask, truncated_dist=0.2, max_iteration=50, tolerance=0.001, verbose=False, visualize_path=None):
-    
     '''
     Iterative Closest Point with object-mask and paralelized for batch
     Inputs: pts1: torch.Tensor (bs, N, 3) - source points
