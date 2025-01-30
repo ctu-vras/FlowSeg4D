@@ -281,7 +281,7 @@ if __name__ == "__main__":
         scene = nusc.get('scene', sample['scene_token'])
 
         if curr_scene is not None and curr_scene != scene["name"]:
-            np.save("exports/" + curr_scene, points)
+            np.save("exports/" + curr_scene, points.T)
             points = np.zeros((3, 0))
             curr_scene = None
         if curr_scene is None:
