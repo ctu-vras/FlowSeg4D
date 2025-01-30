@@ -263,22 +263,32 @@ if __name__ == "__main__":
     points = np.zeros((3, 0))
 
     curr_scene = None
-    count = 0
     for i, batch in enumerate(trn_loader):
-        print(batch["ego_motion"][0]["scene"]["name"])
-        if batch["ego_motion"][0]["scene"]["name"] != "scene-0158":
-            if points.shape[1] > 0:
-                np.save("exports/full_0158", points.T)
-                points = np.zeros((3,0))
-                exit(0)
+        sample_data = None
+        for sd in nusc.sample_data:
+            if sd['token'] == batch["filename"][0]:
+                sample_data = sd
+                break
+        if sample_data is None:
+            print(f"[ERROR]: sample data is None for file {batch['filename']}")
             continue
-        if batch["ego_motion"][0] is None:
+
+        sample = nusc.get('sample', sample_data['sample_token'])
+        if sample is None:
+            print(f"[ERROR]: sample is None for file {batch['filename']}")
             continue
+
+        scene = nusc.get('scene', sample['scene_token'])
+
+        if curr_scene is not None and curr_scene != scene["name"]:
+            np.save("exports/" + curr_scene, points)
+            points = np.zeros((3, 0))
+            curr_scene = None
         if curr_scene is None:
-            curr_scene = batch["ego_motion"][0]["scene"]["token"]
+            curr_scene = scene["name"]
+            print(f"[INFO]: New scene: {curr_scene}")
 
             # Get reference pose
-            sample = nusc.get("sample", batch["ego_motion"][0]["scene"]["first_sample_token"])
             ref_sd_token = sample['data']['LIDAR_TOP']
             ref_sd_rec = nusc.get('sample_data', ref_sd_token)
             ref_pose_rec = nusc.get('ego_pose', ref_sd_rec['ego_pose_token'])
@@ -290,11 +300,6 @@ if __name__ == "__main__":
             # Homogeneous transformation matrix from global to _current_ ego car frame.
             car_from_global = transform_matrix(ref_pose_rec['translation'], Quaternion(ref_pose_rec['rotation']),
                                             inverse=True)
-        elif curr_scene != batch["ego_motion"][0]["scene"]["token"]:
-            np.save("exports/" + batch["ego_motion"][0]["scene"]["name"], points)
-            points = np.zeros((3, 0))
-            curr_scene = None
-            continue
 
         # Network inputs
         feat = batch["feat"].to(device)
@@ -319,46 +324,40 @@ if __name__ == "__main__":
         # reconstruct point clouds
         sample_data_token = sample['data']['LIDAR_TOP']
         current_sd_rec = nusc.get('sample_data', sample_data_token)
-        for i in range(batch['feat'].shape[0]):
-            predictions = out_upsample[i].argmax(dim=1)
+        while current_sd_rec:
+            if current_sd_rec["token"] == batch["filename"][0]:
+                break
+            current_sd_rec = nusc.get('sample_data', current_sd_rec['next'])
+
+        for j in range(batch['feat'].shape[0]):
+            predictions = out_upsample[j].argmax(dim=1)
 
             pcd = batch["feat"][-1, :, :out_upsample[-1].shape[0]].T
-            # _, mask = remove_ego_vehicle(pcd, "nuscenes")
-            # pcd, pred = pcd[mask], predictions[mask]
+            _, mask = remove_ego_vehicle(pcd, "nuscenes")
+            pcd, pred = pcd[mask], predictions[mask]
 
-            # mask = (pred == 3).cpu().numpy()  # Car class
-            # pcd = pcd[mask].cpu().numpy()
-            pcd = pcd[:, [2, 1, 0]]
+            mask = (pred == 3).cpu().numpy()  # Car class
+            pcd = pcd[mask].cpu().numpy()
+            pcd = pcd[:, [1, 2, 3]]
 
             # Get past pose.
             current_pose_rec = nusc.get('ego_pose', current_sd_rec['ego_pose_token'])
             global_from_car = transform_matrix(current_pose_rec['translation'],
-                                            Quaternion(current_pose_rec['rotation']), inverse=False)
+                                               Quaternion(current_pose_rec['rotation']), inverse=False)
 
             # Homogeneous transformation matrix from sensor coordinate frame to ego car frame.
             current_cs_rec = nusc.get('calibrated_sensor', current_sd_rec['calibrated_sensor_token'])
             car_from_current = transform_matrix(current_cs_rec['translation'], Quaternion(current_cs_rec['rotation']),
                                                 inverse=False)
 
-            # labels = get_clusters(pcd, eps=2.5, min_points=15)
-            # pcd = pcd[labels != -1]
+            labels = get_clusters(pcd, eps=2.5, min_points=15)
+            pcd = pcd[labels != -1]
             pcd = np.c_[pcd, np.ones((pcd.shape[0], 1))]
-            print(pcd.shape)
+            # print(pcd.shape)
 
             # Fuse four transformation matrices into one and perform transform.
             pcd = LidarPointCloud(pcd.T)
             trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
-            print(count)
-            print(trans_matrix)
-            count += 1
             pcd.transform(trans_matrix)
 
             points = np.hstack((points, pcd.points[:3, :]))
-
-            # Abort if there are no next sweeps.
-            if current_sd_rec['next'] == '':
-                break
-            else:
-                current_sd_rec = nusc.get('sample_data', current_sd_rec['next'])
-
-    np.save("exports/full_0158", points.T)

@@ -46,13 +46,10 @@ car_from_global = transform_matrix(ref_pose_rec['translation'], Quaternion(ref_p
 # Aggregate current and previous sweeps.
 sample_data_token = sample['data']['LIDAR_TOP']
 current_sd_rec = nusc.get('sample_data', sample_data_token)
-filenames = []
-count = 0
 while current_sd_rec:
     # Load up the pointcloud and remove points close to the sensor.
     filename = current_sd_rec['filename']
     if "samples" in filename:
-        filenames.append(filename)
         current_pc = LidarPointCloud.from_file(osp.join(nusc.dataroot, current_sd_rec['filename']))
         current_pc.remove_close(1.0)
 
@@ -68,9 +65,6 @@ while current_sd_rec:
 
         # Fuse four transformation matrices into one and perform transform.
         trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
-        print(count)
-        print(trans_matrix)
-        count += 1
         current_pc.transform(trans_matrix)
 
         # Merge with key pc.
@@ -86,4 +80,3 @@ while current_sd_rec:
 # Save or process the aggregated point cloud
 np.save('all_pc.npy', all_pc.points.T[:,:3])
 print("Aggregated point cloud saved as 'all_pc.npy'")
-np.save('filenames.npy', np.array(filenames))
