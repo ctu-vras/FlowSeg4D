@@ -57,9 +57,9 @@ def icp_transform(
     # Run the ICP transformation
     best_icp_result = None
     for i in range(N):
-        for j in range(N // 4, N - (N // 4)):
+        for j in range(N):
             for k in range(N):
-                init_transform[:3, 3] = np.array([translate[i], 0, translate[j]])
+                init_transform[:3, 3] = np.array([translate[i], translate[j], 0])
                 init_transform[:3, :3] = rot_matrix_from_Euler(0, 0, k * 2 * np.pi / N)
                 icp_result = o3d.pipelines.registration.registration_icp(
                     source=source_pcd,
