@@ -10,11 +10,12 @@ from joblib import Parallel, delayed
 from utils import rot_matrix_from_Euler
 
 
-# TODO: Set hyperparameters
-N = 10
-M = 20
-FITNESS_THRESHOLD = 0.3
-DISTANCE_THRESHOLD = 0.4
+# TODO: Set hyperparameters, later change for json config file
+TRANSLATION = 1  # Init translation range for ICP
+N = 10  # Number of translation configurations
+M = 20  # Number of rotation configurations
+FITNESS_THRESHOLD = 0.3  # Fitness threshold for good match
+DISTANCE_THRESHOLD = 0.4  # Symetric distance threshold for good match
 
 
 def icp_match(
@@ -60,6 +61,7 @@ def icp_match(
     if voxel_size is not None:
         source_pcd.voxel_down_sample(voxel_size)
         target_pcd.voxel_down_sample(voxel_size)
+        threshold = voxel_size * 2
 
     # Run the ICP transformation
     icp_result = o3d.pipelines.registration.registration_icp(
@@ -93,7 +95,7 @@ def icp_transform(
     sample: torch.Tensor | np.ndarray
         point cloud to be transformed
     treshold: float
-        treshold for convergence
+        treshold for convergence, automatically set to 2 * voxel_size if voxel_size is not None
     voxel_size: float
         voxel size for downsampling
     """
@@ -107,7 +109,7 @@ def icp_transform(
     assert sample.shape[1] == 3, "Target data must have shape (M, 3)"
 
     # Generate the translation and rotation matrices
-    translate = np.linspace(-1, 1, N)
+    translate = np.linspace(-TRANSLATION, TRANSLATION, N)
     T_x, T_y = np.meshgrid(translate, translate)
     T_x, T_y = T_x.ravel(), T_y.ravel()
 
