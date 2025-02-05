@@ -10,22 +10,58 @@ from joblib import Parallel, delayed
 from utils import rot_matrix_from_Euler
 
 
+# TODO: Set hyperparameters
 N = 10
 M = 20
 FITNESS_THRESHOLD = 0.3
 DISTANCE_THRESHOLD = 0.4
 
 
-def icp_match(source_pc, target_pc, t_x, t_y, rot_matrix, threshold):
+def icp_match(
+    source_pts: np.ndarray,
+    target_pts: np.ndarray,
+    t_x: float,
+    t_y: float,
+    rot_matrix: np.ndarray,
+    threshold: float,
+    voxel_size: Optional[float] = None,
+):
+    """
+    Run the ICP transformation between two point clouds
+    Parameters
+    ----------
+    source_pts: np.ndarray
+        the source point cloud
+    target_pts: np.ndarray
+        point cloud to be transformed
+    t_x: float
+        translation in x axis
+    t_y: float
+        translation in y axis
+    rot_matrix: np.ndarray
+        rotation matrix
+    threshold: float
+        threshold for convergence
+    voxel_size: float
+        voxel size for downsampling
+    """
+    # Set initial transformation
     init_transform = np.eye(4)
     init_transform[:3, :3] = rot_matrix
     init_transform[:3, 3] = np.array([t_x, t_y, 0])
 
+    # Initialize the point clouds
     source_pcd = o3d.geometry.PointCloud()
-    source_pcd.points = o3d.utility.Vector3dVector(source_pc)
+    source_pcd.points = o3d.utility.Vector3dVector(source_pts)
     target_pcd = o3d.geometry.PointCloud()
-    target_pcd.points = o3d.utility.Vector3dVector(target_pc)
+    target_pcd.points = o3d.utility.Vector3dVector(target_pts)
 
+    # If required, downsample the point clouds
+    if voxel_size is not None:
+        source_pcd.voxel_down_sample(voxel_size)
+        target_pcd.voxel_down_sample(voxel_size)
+
+    # Run the ICP transformation
     icp_result = o3d.pipelines.registration.registration_icp(
         source=source_pcd,
         target=target_pcd,
@@ -34,6 +70,7 @@ def icp_match(source_pc, target_pc, t_x, t_y, rot_matrix, threshold):
         estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),
     )
 
+    # Return the result in pickable format
     return {
         "fitness": icp_result.fitness,
         "inlier_rmse": icp_result.inlier_rmse,
@@ -45,6 +82,7 @@ def icp_transform(
     source: Union[torch.Tensor, np.ndarray],
     sample: Union[torch.Tensor, np.ndarray],
     treshold: float = 0.1,
+    voxel_size: Optional[float] = None,
 ):
     """
     ICP transformation between two point clouds
@@ -56,6 +94,8 @@ def icp_transform(
         point cloud to be transformed
     treshold: float
         treshold for convergence
+    voxel_size: float
+        voxel size for downsampling
     """
     if isinstance(source, torch.Tensor):
         source = source.cpu().numpy()
@@ -66,11 +106,12 @@ def icp_transform(
     assert sample.ndim == 2, "Target data must have shape (M, 3)"
     assert sample.shape[1] == 3, "Target data must have shape (M, 3)"
 
+    # Generate the translation and rotation matrices
     translate = np.linspace(-1, 1, N)
     T_x, T_y = np.meshgrid(translate, translate)
     T_x, T_y = T_x.ravel(), T_y.ravel()
 
-    rot_matrices = [rot_matrix_from_Euler(0, 0, i * 2 * np.pi / M) for i in range(M)]
+    rot_mat = [rot_matrix_from_Euler(0, 0, i * 2 * np.pi / M) for i in range(M)]
 
     # Initialize the point clouds and move the point clouds to their centroid
     source_cent = (np.min(source, axis=0) + np.max(source, axis=0)) / 2
@@ -81,14 +122,14 @@ def icp_transform(
     # Run the ICP transformation
     results = Parallel(n_jobs=-1)(
         delayed(icp_match)(
-            source_pcd, target_pcd, T_x[i], T_y[i], rot_matrices[j], treshold
+            source_pcd, target_pcd, T_x[i], T_y[i], rot_mat[j], treshold, voxel_size
         )
         for i in range(len(T_x))
-        for j in range(len(rot_matrices))
+        for j in range(len(rot_mat))
     )
-    best_icp_result = max(results, key=lambda x: x["fitness"])
 
-    return best_icp_result
+    # Return the best result
+    return max(results, key=lambda x: x["fitness"])
 
 
 def good_match(
@@ -100,7 +141,7 @@ def good_match(
     visualize: bool = False,
 ) -> bool:
     """
-    Get the good match between two point clouds
+    Determine if the ICP match is good - objects are of the same class
     Parameters
     ----------
     source: torch.Tensor | np.ndarray
@@ -161,5 +202,4 @@ def good_match(
             o3d.io.write_point_cloud(save_name, merged_pcd)
 
     # Determine if the match is good
-    # TODO: Set hyperparameters
     return fitness > FITNESS_THRESHOLD and symetric_distance < DISTANCE_THRESHOLD
