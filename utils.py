@@ -41,9 +41,9 @@ def load_boxes(file_path: Union[Path, str], dataset: str) -> pd.DataFrame:
     elif dataset == "waymo":
         raise NotImplementedError("Waymo dataset not yet supported")  # TODO: Implement
     elif dataset == "scala3":
-        raise ValueError("Scala3 dataset does not have boxes")
+        raise ValueError("Scala3 dataset not yet supported")
     elif dataset == "pone":
-        raise ValueError("Scala3 dataset does not have boxes")
+        raise ValueError("PONE dataset not yet supported")
     else:
         raise NotImplementedError(f"Dataset {dataset} not supported")
     return boxes
@@ -157,7 +157,9 @@ def rot_matrix_from_Euler(alpha: float, beta: float, gamma: float) -> np.ndarray
     return ret
 
 
-def get_box_mask(pcd: Union[torch.Tensor, np.ndarray], box: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
+def get_box_mask(
+    pcd: Union[torch.Tensor, np.ndarray], box: Union[torch.Tensor, np.ndarray]
+) -> torch.Tensor:
     device = pcd.device if isinstance(pcd, torch.Tensor) else "cpu"
     if isinstance(pcd, np.ndarray):
         pcd = torch.tensor(pcd, device=device)
@@ -191,12 +193,14 @@ def get_box_mask(pcd: Union[torch.Tensor, np.ndarray], box: Union[torch.Tensor, 
     return mask
 
 
-def remove_ego_vehicle(pcd: Union[torch.Tensor, np.ndarray], dataset: str) -> Tuple[torch.Tensor, torch.Tensor]:
+def remove_ego_vehicle(
+    pcd: Union[torch.Tensor, np.ndarray], dataset: str
+) -> Tuple[torch.Tensor, torch.Tensor]:
     device = pcd.device if isinstance(pcd, torch.Tensor) else "cpu"
     if isinstance(pcd, np.ndarray):
         pcd = torch.tensor(pcd, device=device)
     assert pcd.ndim == 2, "Input data must have shape (N, M)"
-    
+
     if dataset == "av2":
         ego_box = torch.tensor([0, 0, 0, 4.841, 1.834, 1.445, 0])
     elif dataset == "nuscenes":
@@ -204,7 +208,6 @@ def remove_ego_vehicle(pcd: Union[torch.Tensor, np.ndarray], dataset: str) -> Tu
     else:
         raise ValueError(f"Dataset {dataset} not supported")
 
-    mask = get_box_mask(pcd[:,:3], ego_box)
+    mask = get_box_mask(pcd[:, :3], ego_box)
 
     return pcd[~mask], ~mask
-

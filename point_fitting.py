@@ -12,8 +12,8 @@ from utils import rot_matrix_from_Euler
 
 # TODO: Set hyperparameters, later change for json config file
 TRANSLATION = 1  # Init translation range for ICP
-N = 10  # Number of translation configurations
-M = 20  # Number of rotation configurations
+N = 6  # Number of translation configurations
+M = 10  # Number of rotation configurations
 FITNESS_THRESHOLD = 0.3  # Fitness threshold for good match
 DISTANCE_THRESHOLD = 0.4  # Symetric distance threshold for good match
 
@@ -24,7 +24,7 @@ def icp_match(
     t_x: float,
     t_y: float,
     rot_matrix: np.ndarray,
-    threshold: float,
+    threshold: float = 0.1,
     voxel_size: Optional[float] = None,
 ):
     """
@@ -132,6 +132,30 @@ def icp_transform(
 
     # Return the best result
     return max(results, key=lambda x: x["fitness"])
+
+
+def icp_match_torch(source, target, n_iter=30):
+    source_cent = (
+        torch.min(source, dim=0).values + torch.max(source, dim=0).values
+    ) / 2
+    coords = source - source_cent
+    target_cent = (
+        torch.min(target, dim=0).values + torch.max(target, dim=0).values
+    ) / 2
+    coords_ref = target - target_cent
+
+    if coords.shape[1] == 3:
+        coords = torch.cat((coords, torch.ones(coords.shape[0], 1)), dim=1)
+        coords_ref = torch.cat((coords_ref, torch.ones(coords_ref.shape[0], 1)), dim=1)
+
+    for _ in range(n_iter):
+        cdist = torch.cdist(coords, coords_ref)
+        mindists, argmins = torch.min(cdist, dim=1)
+        X = torch.linalg.lstsq(coords, coords_ref[argmins]).solution
+        coords = coords @ X.T
+        rmse = torch.sqrt(torch.mean(mindists**2))
+        print(f"RMSE: {rmse:.4f}")
+    return coords[:, :3] - source_cent
 
 
 def good_match(

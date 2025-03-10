@@ -10,11 +10,8 @@ import torch
 import numpy as np
 import open3d as o3d
 
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
 from utils import visualize_pcd, get_clusters
-from point_fitting import icp_transform, good_match
+from point_fitting import icp_transform, good_match, icp_match
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,71 +28,57 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
 
-    # Load reference vehicles
-    ref_veh = o3d.io.read_point_cloud("exports/cloud_test.ply")
-    ref_veh_points = np.asarray(ref_veh.points)
-    ref_veh_colors = np.asarray(ref_veh.colors)
-    ref_veh1 = ref_veh_points[np.all(ref_veh_colors == [1, 0, 0], axis=1)]
-    ref_veh2 = ref_veh_points[np.all(ref_veh_colors == [0, 1, 0], axis=1)]
-
     # Load and preprocess the point cloud
     data = np.load("exports/scene-0158.npy", allow_pickle=True).T
     labels = get_clusters(data, args.eps, args.min_points)
     cluster_num = len(np.unique(labels))
-    # print(f"Number of clusters: {cluster_num}")
 
     # Do ICP
     cluster1 = data[labels == 0]
     cluster2 = data[labels == 1]
 
-    cluster_cent1 = (np.min(cluster1, axis=0) + np.max(cluster1, axis=0)) / 2
-    cluster_cent2 = (np.min(cluster2, axis=0) + np.max(cluster2, axis=0)) / 2
-
-    cluster_cent1 = np.mean(cluster1, axis=0)
-    cluster_cent2 = np.mean(cluster2, axis=0)
-
-    # Plot the 3D points and bounding box
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-    points = cluster1 - cluster_cent1
-
-    # Plot points
-    ax.scatter(
-        points[:, 0],
-        points[:, 1],
-        points[:, 2],
-        c="red",
-        marker="o",
-        label="Points",
-        s=5,
-    )
-
-    points = cluster2 - cluster_cent2
-
-    # Plot points
-    ax.scatter(
-        points[:, 0],
-        points[:, 1],
-        points[:, 2],
-        c="blue",
-        marker="o",
-        label="Points",
-        s=5,
-    )
-
-    # Labels and legend
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    ax.set_title("3D Points and Bounding Box")
-    ax.legend()
-
-    # plt.show()
-    # exit()
+    # Save the clusters
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(cluster1)
+    o3d.io.write_point_cloud("exp/cluster1.ply", pcd)
+    pcd.points = o3d.utility.Vector3dVector(cluster2)
+    o3d.io.write_point_cloud("exp/cluster2.ply", pcd)
 
     start = time.time()
     res = icp_transform(cluster1, cluster2)
+    # print(res)
+
+    # source_cent = (np.min(cluster1, axis=0) + np.max(cluster1, axis=0)) / 2
+    # cluster1 = torch.tensor(cluster1 - source_cent)
+    # sample_cent = (np.min(cluster2, axis=0) + np.max(cluster2, axis=0)) / 2
+    # cluster2 = torch.tensor(cluster2 - sample_cent)
+    #
+    # cdist = torch.cdist(cluster1, cluster2)
+    # argmin = torch.argmin(cdist, dim=1)
+    # cluster2 = cluster2[argmin]
+    #
+    # H = cluster2.T @ cluster1
+    # U, S, V = torch.svd(H)
+    # R = V.T @ U.T
+    #
+    # if torch.det(R) < 0:
+    #     V[:, -1] *= -1
+    #     R = V.T @ U.T
+    #
+    # t = sample_cent - R.numpy() @ source_cent
+    #
+    # res = icp_match(cluster1, cluster2, t[0], t[1], R)
     print(f"Time taken: {time.time() - start:.2f} s")
+    # vis_cluster = torch.cat((torch.tensor(cluster2), res), dim=0)
+    # visualize_pcd(
+    #     vis_cluster,
+    #     labels=np.concatenate((np.ones(len(cluster2)), 2 * np.ones(len(cluster1)))),
+    # )
     good = good_match(
-        cluster1, cluster2, res, save_name="exp/cluster_test.ply", visualize=True
+        cluster1,
+        cluster2,
+        res,
+        save_name="exp/cluster_test.ply",
+        visualize=True,
+        verbose=True,
     )
