@@ -13,6 +13,7 @@ import torch
 from pytorch3d.ops import knn_points
 from pytorch3d.ops import utils as oputil
 from pytorch3d.structures import utils as strutil
+
 if TYPE_CHECKING:
     from pytorch3d.structures.pointclouds import Pointclouds
 
@@ -36,7 +37,7 @@ def iterative_closest_point(
     X: Union[torch.Tensor, "Pointclouds"],
     Y: Union[torch.Tensor, "Pointclouds"],
     init_transform: Optional[SimilarityTransform] = None,
-    thres: float = 0.1, 
+    thres: float = 0.1,
     max_iterations: int = 100,
     relative_rmse_thr: float = 1e-6,
     estimate_scale: bool = False,
@@ -104,8 +105,8 @@ def iterative_closest_point(
             + "number of batches and data dimensions."
         )
 
-    mask_X = X[:, :, -1]>0.0
-    mask_Y = Y[:, :, -1]>0.0
+    mask_X = X[:, :, -1] > 0.0
+    mask_Y = Y[:, :, -1] > 0.0
     num_points_X = mask_X.sum(dim=-1)
     num_points_Y = mask_Y.sum(dim=-1)
 
@@ -150,12 +151,18 @@ def iterative_closest_point(
     # the main loop over ICP iterations
     for iteration in range(max_iterations):
         knn_result = knn_points(
-            Xt, Yt, lengths1=num_points_X, lengths2=num_points_Y, K=1, return_nn=True, norm=2
+            Xt,
+            Yt,
+            lengths1=num_points_X,
+            lengths2=num_points_Y,
+            K=1,
+            return_nn=True,
+            norm=2,
         )
         Xt_nn_points = knn_result.knn[:, :, 0, :]
         # print('knn points: ', valid.shape, Xt_init.shape, Xt_nn_points.shape)
 
-        valid = knn_result.dists[:, :, 0]<=thres**2
+        valid = knn_result.dists[:, :, 0] <= thres**2
         mask_X = torch.logical_and(mask_X_init, valid)
 
         X1 = Xt_init * mask_X[:, :, None]
@@ -173,11 +180,11 @@ def iterative_closest_point(
 
         # apply the estimated similarity transform to Xt_init
         Xt = _apply_similarity_transform(Xt_init, R, T, s)
-        # if iteration%2==0: 
+        # if iteration%2==0:
         #     src = Xt[0]
         #     dst = Yt[0]
-        #     visualize_pcd(np.concatenate([src.cpu().numpy(), dst.cpu().numpy()], axis=0), 
-        #                   np.concatenate([np.zeros((len(src)))+1, np.zeros((len(dst)))+2], axis=0), 
+        #     visualize_pcd(np.concatenate([src.cpu().numpy(), dst.cpu().numpy()], axis=0),
+        #                   np.concatenate([np.zeros((len(src)))+1, np.zeros((len(dst)))+2], axis=0),
         #                   num_colors=3,
         #                   title=f'registration, iter: {iteration} {len(src)} vs {len(dst)}')
 
