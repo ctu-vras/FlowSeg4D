@@ -24,26 +24,26 @@ def topk_nms(x, k=5, kernel_size=11):
 
 # ### sometimes memeory overflows when time duration increases, because of too many clusters
 # ### in case memory overflows, decrease the batch size to fit your GPUs if necessary
-def estimate_init_pose(args, src, dst):
+def estimate_init_pose(config, src, dst):
     transformations = []
     assert len(src) == len(dst)
     n = (
-        len(src) // args.chunk_size
-        if len(src) % args.chunk_size == 0
-        else len(src) // args.chunk_size + 1
+        len(src) // config["chunk_size"]
+        if len(src) % config["chunk_size"] == 0
+        else len(src) // config["chunk_size"] + 1
     )
     for k in range(0, n):
         transformation = estimate_init_pose_batch(
-            args,
-            src[k * args.chunk_size : (k + 1) * args.chunk_size],
-            dst[k * args.chunk_size : (k + 1) * args.chunk_size],
+            config,
+            src[k * config["chunk_size"] : (k + 1) * config["chunk_size"]],
+            dst[k * config["chunk_size"] : (k + 1) * config["chunk_size"]],
         )
         transformations.append(transformation)
     transformations = torch.vstack(transformations)
     return transformations
 
 
-def estimate_init_pose_batch(args, src, dst):
+def estimate_init_pose_batch(config, src, dst):
     pcd1 = src[:, :, 0:3]
     pcd2 = dst[:, :, 0:3]
     mask1 = src[:, :, -1] > 0.0
@@ -53,17 +53,17 @@ def estimate_init_pose_batch(args, src, dst):
     eps = 1e-8
     # https://pytorch.org/docs/stable/generated/torch.arange.html#torch-arange
     bins_x = torch.arange(
-        -args.translation_frame,
-        args.translation_frame + args.thres_dist - eps,
-        args.thres_dist,
+        -config["translation_frame"],
+        config["translation_frame"] + config["thres_dist"] - eps,
+        config["thres_dist"],
     )
     bins_y = torch.arange(
-        -args.translation_frame,
-        args.translation_frame + args.thres_dist - eps,
-        args.thres_dist,
+        -config["translation_frame"],
+        config["translation_frame"] + config["thres_dist"] - eps,
+        config["thres_dist"],
     )
     bins_z = torch.arange(
-        -args.thres_dist, args.thres_dist + args.thres_dist - eps, args.thres_dist
+        -config["thres_dist"], config["thres_dist"] + config["thres_dist"] - eps, config["thres_dist"]
     )
 
     # bug there: when batch size is large!
@@ -93,7 +93,7 @@ def estimate_init_pose_batch(args, src, dst):
             ],
             dim=-1,
         )
-        + args.thres_dist // 2
+        + config["thres_dist"] // 2
     )
     del t_hist, bins_x, bins_y, bins_z
 

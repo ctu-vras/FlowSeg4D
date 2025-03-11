@@ -8,10 +8,10 @@ from ICP_Flow.utils_helper import transform_points_batch, nearest_neighbor_batch
 warnings.filterwarnings("ignore")
 
 
-def apply_icp(args, src, dst, init_poses):
+def apply_icp(config, src, dst, init_poses):
     src_tmp = transform_points_batch(src, init_poses)
 
-    Rts = pytorch3d_icp(args, src_tmp, dst)
+    Rts = pytorch3d_icp(config, src_tmp, dst)
     Rts = torch.bmm(Rts, init_poses)
 
     # # # pytorch 3d icp might go wrong ! to fix!
@@ -28,12 +28,12 @@ def apply_icp(args, src, dst, init_poses):
     return Rts
 
 
-def pytorch3d_icp(args, src, dst):
+def pytorch3d_icp(config, src, dst):
     icp_result = iterative_closest_point(
         src,
         dst,
         init_transform=None,
-        thres=args.thres_dist,
+        thres=config["thres_dist"],
         max_iterations=100,
         relative_rmse_thr=1e-6,
         estimate_scale=False,

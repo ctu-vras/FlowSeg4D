@@ -18,7 +18,7 @@ from ICP_Flow.utils_helper import (
 warnings.filterwarnings("ignore")
 
 
-def match_pcds(args, src_points, dst_points, src_labels, dst_labels):
+def match_pcds(config, src_points, dst_points, src_labels, dst_labels):
     src_labels_unq = torch.unique(src_labels, return_counts=False).long()
     dst_labels_unq = torch.unique(dst_labels, return_counts=False).long()
     labels_unq = torch.unique(
@@ -30,12 +30,12 @@ def match_pcds(args, src_points, dst_points, src_labels, dst_labels):
     mask = pairs.min(dim=1)[0] >= 0  # remove ground
     pairs = pairs[mask]
     pairs_true = sanity_check(
-        args, src_points, dst_points, src_labels, dst_labels, pairs
+        config, src_points, dst_points, src_labels, dst_labels, pairs
     )
 
     if len(pairs_true) > 0:
         pairs_sta, transformations_sta = match_pairs(
-            args, src_points, dst_points, src_labels, dst_labels, pairs_true
+            config, src_points, dst_points, src_labels, dst_labels, pairs_true
         )
     else:
         pairs_sta, transformations_sta = (
@@ -58,14 +58,14 @@ def match_pcds(args, src_points, dst_points, src_labels, dst_labels):
             dim=1,
         )
         pairs_true = sanity_check(
-            args, src_points, dst_points, src_labels, dst_labels, pairs
+            config, src_points, dst_points, src_labels, dst_labels, pairs
         )
     else:
         pairs_true = torch.zeros(0, 2)
 
     if len(pairs_true) > 0:
         pairs_dyn, transformations_dyn = match_pairs(
-            args, src_points, dst_points, src_labels, dst_labels, pairs_true
+            config, src_points, dst_points, src_labels, dst_labels, pairs_true
         )
     else:
         pairs_dyn, transformations_dyn = (
@@ -82,7 +82,7 @@ def match_pcds(args, src_points, dst_points, src_labels, dst_labels):
     return pairs_matched, transformations_matched
 
 
-def match_pairs(args, src_points, dst_points, src_labels, dst_labels, pairs):
+def match_pairs(config, src_points, dst_points, src_labels, dst_labels, pairs):
     src_labels_unq = torch.unique(src_labels)
     dst_labels_unq = torch.unique(dst_labels)
     matrix_errors = torch.zeros((len(src_labels_unq), len(dst_labels_unq), 2)) + 1e8
@@ -99,17 +99,17 @@ def match_pairs(args, src_points, dst_points, src_labels, dst_labels, pairs):
     for pair in pairs:
         src = src_points[src_labels == pair[0], 0:3]
         dst = dst_points[dst_labels == pair[1], 0:3]
-        src = pad_segment(src, args.max_points)
-        dst = pad_segment(dst, args.max_points)
+        src = pad_segment(src, config.max_points)
+        dst = pad_segment(dst, config.max_points)
         # always match the smaller one to the larger one
         segs_src.append(src)
         segs_dst.append(dst)
 
     segs_src = torch.stack(segs_src, dim=0)
     segs_dst = torch.stack(segs_dst, dim=0)
-    transformations = hist_icp(args, segs_src, segs_dst)
+    transformations = hist_icp(config, segs_src, segs_dst)
     errors, inliers, ratios, ious, translations, rotations = match_eval(
-        args, segs_src, segs_dst, transformations
+        config, segs_src, segs_dst, transformations
     )
     # reject unreliable matches
     num_matches = 0
@@ -134,7 +134,7 @@ def match_pairs(args, src_points, dst_points, src_labels, dst_labels, pairs):
             transformations,
         )
     ):
-        if not check_transformation(args, translation, rotation, min(iou)):
+        if not check_transformation(config, translation, rotation, min(iou)):
             continue
         src_idx = torch.nonzero(src_labels_unq == pair[0])
         dst_idx = torch.nonzero(dst_labels_unq == pair[1])
@@ -148,7 +148,7 @@ def match_pairs(args, src_points, dst_points, src_labels, dst_labels, pairs):
     if num_matches > 0:
         matrix_errors_min, _ = matrix_errors.min(-1)
         src_idxs, dst_idxs = match_segments_descend(matrix_errors_min)
-        valid = matrix_errors_min[src_idxs, dst_idxs] < args.thres_error
+        valid = matrix_errors_min[src_idxs, dst_idxs] < config["thres_error"]
         src_idxs = src_idxs[valid]
         dst_idxs = dst_idxs[valid]
 
@@ -180,7 +180,7 @@ def match_pairs(args, src_points, dst_points, src_labels, dst_labels, pairs):
     return pairs, transformations
 
 
-def hist_icp(args, src, dst):
+def hist_icp(config, src, dst):
     mask1 = src[:, :, -1] > 0.0
     mask2 = dst[:, :, -1] > 0.0
     # alwyas match the smaller one to the larger one
@@ -191,8 +191,8 @@ def hist_icp(args, src, dst):
     dst_[idxs] = src[idxs]
 
     with torch.no_grad():
-        init_poses_ = estimate_init_pose(args, src_, dst_)
-        transformations_ = apply_icp(args, src_, dst_, init_poses_)
+        init_poses_ = estimate_init_pose(config, src_, dst_)
+        transformations_ = apply_icp(config, src_, dst_, init_poses_)
 
     if sum(idxs) > 0:
         transformations = transformations_.clone()
@@ -202,7 +202,7 @@ def hist_icp(args, src, dst):
     return transformations
 
 
-def match_eval(args, pcd1, pcd2, transformations):
+def match_eval(config, pcd1, pcd2, transformations):
     pcd1_tmp = transform_points_batch(pcd1, transformations)
     src = pcd1_tmp
     dst = pcd2
@@ -211,8 +211,8 @@ def match_eval(args, pcd1, pcd2, transformations):
     _, src_error = nearest_neighbor_batch(src, dst)
     _, dst_error = nearest_neighbor_batch(dst, src)
 
-    src_inlier = torch.logical_and(src_error < args.thres_dist, src_mask).float()
-    dst_inlier = torch.logical_and(dst_error < args.thres_dist, dst_mask).float()
+    src_inlier = torch.logical_and(src_error < config["thres_dist"], src_mask).float()
+    dst_inlier = torch.logical_and(dst_error < config["thres_dist"], dst_mask).float()
 
     src_ratio = torch.sum(src_inlier, dim=1) / torch.sum(src_mask, dim=1)
     dst_ratio = torch.sum(dst_inlier, dim=1) / torch.sum(dst_mask, dim=1)

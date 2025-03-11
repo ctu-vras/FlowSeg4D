@@ -1,0 +1,21 @@
+# cluster parameters
+num_clusters: 100
+min_cluster_size: 30
+epsilon: 0.25
+
+# hist parameters
+speed: 3.333
+translation_frame: 3.333
+chunk_size: 50
+
+# icp parameters
+max_points: 10000
+thres_dist: 0.1
+
+# sanity check
+thres_box: 0.1
+
+# filter unreliable matches
+thres_error: 0.1
+thres_iou: 0.1
+thres_rot: 0.1
