@@ -3,11 +3,11 @@ import torch
 from ICP_Flow.utils_match import match_pcds
 
 
-def flow_estimation(args, src_points, dst_points, src_labels, dst_labels, pose):
+def flow_estimation(config, src_points, dst_points, src_labels, dst_labels, pose):
     assert len(src_points) == len(src_labels)
 
     pairs, transformations = match_pcds(
-        args, src_points, dst_points, src_labels, dst_labels
+        config, src_points, dst_points, src_labels, dst_labels
     )
 
     T_per_point = torch.eye(4)[None, :, :].repeat(len(src_points), 1, 1)

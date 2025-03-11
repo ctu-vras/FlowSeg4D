@@ -7,11 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from waffleiron import Segmenter
-import ScaLR.utils.transforms as tr
+from icp_flow import flow_estimation
 from ScaLR.datasets import LIST_DATASETS, Collate
-
-from point_fitting import icp_transform, good_match
-from utils import get_clusters, get_points_in_box, quaternion_to_yaw
 
 
 def get_default_parser():
@@ -224,6 +221,9 @@ if __name__ == "__main__":
     args.batch_size = 2
     args.workers = 0
 
+    # --- Setup ICP-Flow
+    config_icp_flow = load_model_config("ICP_Flow/config.yaml")
+
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
     trn_loader, val_loader, _ = get_dataloader(train_dataset, val_dataset, args)
@@ -290,7 +290,6 @@ if __name__ == "__main__":
 
         box_features = box_reg(tokens)
         print("box_features - B x C x N: ", box_features.shape)
-        # print(box_features[1, :, 0])
 
         # instance branch
         K = 20
@@ -307,11 +306,8 @@ if __name__ == "__main__":
         pcd = torch.cat(
             (pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1
         )
-        # print(pcd[:,0])
 
         unique_vals, counts = torch.unique(pred, return_counts=True)
         max_class = unique_vals[torch.argmax(counts)]
 
         break
-
-    break

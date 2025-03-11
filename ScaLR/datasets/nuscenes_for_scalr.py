@@ -64,7 +64,7 @@ class NuScenesSemSeg(PCDataset):
     def __init__(self, ratio="100p", **kwargs):
         super().__init__(**kwargs)
 
-        self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.rootdir, verbose=False)
+        # self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.rootdir, verbose=False)
 
         # For normalizing intensities
         self.mean_int = MEAN_INT
@@ -122,34 +122,34 @@ class NuScenesSemSeg(PCDataset):
 
         return pc, labels, self.list_frames[index][2]
 
-    def get_ego_motion_from_filename(self, filename):
-        # Find the sample_data entry corresponding to the filename
-        sample_data = None
-        for sd in self.nusc.sample_data:
-            if self.nusc.get_sample_data_path(sd['token']).endswith(filename):
-                sample_data = sd
-                break
+    # def get_ego_motion_from_filename(self, filename):
+    #     # Find the sample_data entry corresponding to the filename
+    #     sample_data = None
+    #     for sd in self.nusc.sample_data:
+    #         if self.nusc.get_sample_data_path(sd['token']).endswith(filename):
+    #             sample_data = sd
+    #             break
         
-        if sample_data is None:
-            raise ValueError(f"Filename {filename} not found in the dataset.")
+    #     if sample_data is None:
+    #         raise ValueError(f"Filename {filename} not found in the dataset.")
 
-        ego_pose = self.nusc.get('ego_pose', sample_data['ego_pose_token'])
-        sample = self.nusc.get('sample', sample_data['sample_token'])
-        scene = self.nusc.get('scene', sample['scene_token'])
+    #     ego_pose = self.nusc.get('ego_pose', sample_data['ego_pose_token'])
+    #     sample = self.nusc.get('sample', sample_data['sample_token'])
+    #     scene = self.nusc.get('scene', sample['scene_token'])
         
-        # Extract translation and rotation (quaternion)
-        translation = np.array(ego_pose['translation'])  # (x, y, z)
-        rotation = np.array(ego_pose['rotation'])        # Quaternion (w, x, y, z)
+    #     # Extract translation and rotation (quaternion)
+    #     translation = np.array(ego_pose['translation'])  # (x, y, z)
+    #     rotation = np.array(ego_pose['rotation'])        # Quaternion (w, x, y, z)
 
-        return {
-            'translation': translation,
-            'rotation': rotation,
-            'scene': scene,
-        }
+    #     return {
+    #         'translation': translation,
+    #         'rotation': rotation,
+    #         'scene': scene,
+    #     }
 
-    def get_ego_motion(self, index):
-        ego_motion = self.get_ego_motion_from_filename(self.list_frames[index][0])
-        return ego_motion
+    # def get_ego_motion(self, index):
+    #     ego_motion = self.get_ego_motion_from_filename(self.list_frames[index][0])
+    #     return ego_motion
 
 class NuScenesDistill(ImPcDataset):
     def __init__(self, **kwargs):
