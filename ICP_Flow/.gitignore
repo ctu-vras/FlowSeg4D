@@ -1,0 +1,4 @@
+*.pyc
+*.log
+
+hist_cuda/cpp/build/*
