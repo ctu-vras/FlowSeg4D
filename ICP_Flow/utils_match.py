@@ -79,7 +79,7 @@ def match_pcds(config, src_points, dst_points, src_labels, dst_labels):
     )
     # assert len(pairs_matched)>0 # likely to be bugs or outliers
 
-    return pairs_matched, transformations_matched
+    return pairs_matched.to(src_points.device), transformations_matched.to(src_points.device)
 
 
 def match_pairs(config, src_points, dst_points, src_labels, dst_labels, pairs):
@@ -99,8 +99,8 @@ def match_pairs(config, src_points, dst_points, src_labels, dst_labels, pairs):
     for pair in pairs:
         src = src_points[src_labels == pair[0], 0:3]
         dst = dst_points[dst_labels == pair[1], 0:3]
-        src = pad_segment(src, config.max_points)
-        dst = pad_segment(dst, config.max_points)
+        src = pad_segment(src, config["max_points"])
+        dst = pad_segment(dst, config["max_points"])
         # always match the smaller one to the larger one
         segs_src.append(src)
         segs_dst.append(dst)

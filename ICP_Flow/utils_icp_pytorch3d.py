@@ -341,7 +341,12 @@ def corresponding_points_alignment(
     XYcov = XYcov / total_weight[:, None, None]
 
     # decompose the covariance matrix XYcov
-    U, S, V = torch.svd(XYcov)
+    try:
+        U, S, V = torch.svd(XYcov)
+    except Exception as e:
+        print(torch.linalg.eig(XYcov))
+        raise e
+
 
     # catch ambiguous rotation by checking the magnitude of singular values
     if (S.abs() <= AMBIGUOUS_ROT_SINGULAR_THR).any() and not (
@@ -362,7 +367,7 @@ def corresponding_points_alignment(
         #   if not, finds the nearest rotation s.t. det==1 by
         #   flipping the sign of the last singular vector U
         R_test = torch.bmm(U, V.transpose(2, 1))
-        E[:, -1, -1] = torch.det(R_test)
+        E[:, -1, -1] = torch.det(R_test.float())
 
     # find the rotation matrix by composing U and V again
     R = torch.bmm(torch.bmm(U, E), V.transpose(2, 1))

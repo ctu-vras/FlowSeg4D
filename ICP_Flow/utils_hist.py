@@ -94,7 +94,7 @@ def estimate_init_pose_batch(config, src, dst):
             dim=-1,
         )
         + config["thres_dist"] // 2
-    )
+    ).to(src.device)
     del t_hist, bins_x, bins_y, bins_z
 
     n = pcd1.shape[1]
@@ -123,6 +123,6 @@ def estimate_init_pose_batch(config, src, dst):
     t_best = t_both[torch.arange(0, b, device=idx.device), idx, :]
     del pcd1_, pcd2_, errors
 
-    transformation = torch.eye(4)[None].repeat(b, 1, 1)
+    transformation = torch.eye(4)[None].repeat(b, 1, 1).to(src.device)
     transformation[:, 0:3, -1] = t_best
     return transformation

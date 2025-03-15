@@ -12,7 +12,7 @@ def apply_icp(config, src, dst, init_poses):
     src_tmp = transform_points_batch(src, init_poses)
 
     Rts = pytorch3d_icp(config, src_tmp, dst)
-    Rts = torch.bmm(Rts, init_poses)
+    Rts = torch.bmm(Rts, init_poses).float()
 
     # # # pytorch 3d icp might go wrong ! to fix!
     mask_src = src[:, :, -1] > 0.0
