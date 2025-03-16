@@ -11,7 +11,7 @@ from ScaLR.datasets import LIST_DATASETS, Collate
 
 import matplotlib.pyplot as plt
 
-from utils import get_clusters, get_points_in_box, quaternion_to_yaw
+from utils import get_clusters, get_points_in_box, remove_ego_vehicle
 from point_fitting import icp_transform, good_match
 
 
@@ -226,7 +226,6 @@ if __name__ == "__main__":
         layer_norm=config["waffleiron"]["layernorm"],
     )
 
-
     args.batch_size = 2
     args.workers = 0
 
@@ -317,7 +316,8 @@ if __name__ == "__main__":
     pcd = batch["feat"][-1, :, :out_upsample[-1].shape[0]].T.cuda()
     pred = out_upsample[1].argmax(dim=1)
     pcd = torch.cat((pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1)
-    # print(pcd[:,0])
+    _, mask = remove_ego_vehicle(pcd, "nuscenes")
+    pcd, pred = pcd[mask], pred[mask]
 
     unique_vals, counts = torch.unique(pred, return_counts=True)
     max_class = unique_vals[torch.argmax(counts)]
@@ -328,15 +328,15 @@ if __name__ == "__main__":
             pts = pcd.cpu().numpy()
             mask = (pred == class_id).cpu().numpy()
             labels = get_clusters(pts[mask][:,:3], eps=args.eps, min_points=args.min_points)
-            if class_id == 3:
-                print(labels)
-            colors = plt.cm.get_cmap('tab20', config["classif"]["nb_class"])
+            for i in range(len(labels)):
+                labels[i] += 1
+            colors = plt.cm.get_cmap('Set1', config["classif"]["nb_class"])
             pred_colors = colors(pred.cpu().numpy())
-            colors = plt.get_cmap("tab20")(labels / (labels.max() if labels.max() > 0 else 1))
+            colors = plt.get_cmap("Set1")(labels / (labels.max() if labels.max() > 0 else 1))
             ax[0].scatter(pts[mask][:,1], pts[mask][:,2], c=pred_colors[mask], s=0.1, marker='.', facecolors='r')
             ax[1].scatter(pts[mask][:,1], pts[mask][:,2], c=colors, s=0.1, marker='.', facecolors='r')
             fig.tight_layout()
-            fig.savefig(f"figures/class_{class_id}.png", dpi=500)
+            fig.savefig(f"figures/kitti_class_{class_id}.pdf", dpi=500)
 
     if False:  # visualize waffleiron predictions used for box-point fitting
         colors = plt.cm.get_cmap('tab20', config["classif"]["nb_class"])
@@ -354,13 +354,18 @@ if __name__ == "__main__":
         fig.savefig('test.png', dpi=500)
 
     pts = pcd.cpu().numpy()
+    pts = pts[:, [1, 2, 3]]
+    import open3d as o3d
+    # full = o3d.geometry.PointCloud()
+    # full.points = o3d.utility.Vector3dVector(pts)
+    # o3d.io.write_point_cloud("exports/full.ply", full)
     mask = (pred == 3).cpu().numpy()
-    labels = get_clusters(pts[mask][:,:3], eps=args.eps, min_points=args.min_points)
-    ground_truth = pts[mask][labels == 0][:,:3]
+    labels = get_clusters(pts[mask], eps=args.eps, min_points=args.min_points)
+    ground_truth = pts[mask][labels == 0]
     for label in range(1, max(labels)+1):
         if label == -1:
             continue
-        sample = pts[mask][labels == label][:,:3]
+        sample = pts[mask][labels == label]
         icp_res = icp_transform(ground_truth, sample)
         is_class = good_match(ground_truth, sample, icp_res, f"exports/cloud_{label}.ply")
         print(f"Object is same class: {is_class}\n")
