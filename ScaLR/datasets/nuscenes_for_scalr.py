@@ -126,50 +126,36 @@ class NuScenesSemSeg(PCDataset):
 
     def get_ego_motion_from_filename(self, filename):
         # Find the sample_data entry corresponding to the filename
-        sample_data = None
-        for sd in self.nusc.sample_data:
-            if self.nusc.get_sample_data_path(sd['token']).endswith(filename):
-                sample_data = sd
-                break
-        
-        if sample_data is None:
+        try:
+            sample_data = next(sd for sd in self.nusc.sample_data
+                               if self.nusc.get_sample_data_path(sd['token']).endswith(filename))
+        except StopIteration:
             raise ValueError(f"Filename {filename} not found in the dataset.")
 
         sample = self.nusc.get('sample', sample_data['sample_token'])
         scene = self.nusc.get('scene', sample['scene_token'])
         ref_sample = self.nusc.get('sample', scene['first_sample_token'])
 
-
-        ref_sd_token = ref_sample['data']['LIDAR_TOP']
-        ref_sd_rec = self.nusc.get('sample_data', ref_sd_token)
+        ref_sd_rec = self.nusc.get('sample_data', ref_sample['data']['LIDAR_TOP'])
         ref_pose_rec = self.nusc.get('ego_pose', ref_sd_rec['ego_pose_token'])
         ref_cs_rec = self.nusc.get('calibrated_sensor', ref_sd_rec['calibrated_sensor_token'])
 
-        # Homogeneous transform from ego car frame to reference frame.
         ref_from_car = transform_matrix(ref_cs_rec['translation'], Quaternion(ref_cs_rec['rotation']), inverse=True)
-
-        # Homogeneous transformation matrix from global to _current_ ego car frame.
         car_from_global = transform_matrix(ref_pose_rec['translation'], Quaternion(ref_pose_rec['rotation']),
-                                        inverse=True)
+                                           inverse=True)
 
-        # Get past pose.
-        cur_sd_token = sample['data']['LIDAR_TOP']
-        cur_sd_rec = self.nusc.get('sample_data', cur_sd_token)
+        cur_sd_rec = self.nusc.get('sample_data', sample['data']['LIDAR_TOP'])
         current_pose_rec = self.nusc.get('ego_pose', cur_sd_rec['ego_pose_token'])
-        global_from_car = transform_matrix(current_pose_rec['translation'],
-                                        Quaternion(current_pose_rec['rotation']), inverse=False)
-
-        # Homogeneous transformation matrix from sensor coordinate frame to ego car frame.
         current_cs_rec = self.nusc.get('calibrated_sensor', cur_sd_rec['calibrated_sensor_token'])
+
+        global_from_car = transform_matrix(current_pose_rec['translation'],
+                                           Quaternion(current_pose_rec['rotation']), inverse=False)
         car_from_current = transform_matrix(current_cs_rec['translation'], Quaternion(current_cs_rec['rotation']),
                                             inverse=False)
 
         trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
 
-        return {
-            'ego_motion': trans_matrix,
-            'scene': scene,
-        }
+        return {'ego_motion': trans_matrix, 'scene': scene}
 
     def get_ego_motion(self, index):
         ego_motion = self.get_ego_motion_from_filename(self.list_frames[index][0])
