@@ -3,6 +3,7 @@ import yaml
 import argparse
 
 import torch
+import hdbscan
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -10,6 +11,17 @@ from waffleiron import Segmenter
 from icp_flow import flow_estimation
 from ScaLR.datasets import LIST_DATASETS, Collate
 
+torch.set_default_tensor_type(torch.FloatTensor)
+
+
+def transform_pointcloud(points, transform_matrix):
+    if not isinstance(transform_matrix, torch.Tensor):
+        transform_matrix = torch.tensor(transform_matrix, dtype=points.dtype,
+                                        device=points.device)
+    points_tr = torch.cat((points, torch.ones((points.shape[0], 1))), axis=1)
+    points_tr = torch.mm(transform_matrix, points_tr.T).T
+
+    return points_tr[:, :3]
 
 def get_default_parser():
     parser = argparse.ArgumentParser(description="Training")
@@ -302,12 +314,94 @@ if __name__ == "__main__":
 
         # box to point matching (dynamic to static)
         pcd = batch["feat"][-1, :, : out_upsample[-1].shape[0]].T.cuda()
-        pred = out_upsample[1].argmax(dim=1)
+        pred = out_upsample[-1].argmax(dim=1)
         pcd = torch.cat(
             (pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1
         )
 
         unique_vals, counts = torch.unique(pred, return_counts=True)
         max_class = unique_vals[torch.argmax(counts)]
+
+        src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, :4]
+        src_points = torch.roll(src_points, -1, dims=1)[:,:3]
+        dst_points = batch["feat"][1, :, :out_upsample[1].shape[0]].T[:, :4]
+        dst_points = torch.roll(dst_points, -1, dims=1)[:,:3]
+
+        # ground removal
+        if False:
+            # pypatchworkpp
+            import pypatchworkpp
+
+            params = pypatchworkpp.Parameters()
+            grnd = pypatchworkpp.patchworkpp(params)
+            grnd.estimateGround(points)
+            non_ground = grnd.getNonground()
+            np.save("non_ground_ppp.npy", non_ground)
+
+            # semantic
+            ground_classes = [10, 11, 12, 13]
+            pred = pred.cpu().numpy()
+            mask = np.isin(pred, ground_classes)
+            non_ground = points[~mask][:,:3]
+            np.save("non_ground_sem.npy", non_ground)
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        ground_classes = torch.tensor([10, 11, 12, 13]).to(device)
+        src_pred = out_upsample[0].argmax(dim=1)
+        dst_pred = out_upsample[1].argmax(dim=1)
+
+        src_mask = torch.isin(src_pred, ground_classes)
+        dst_mask = torch.isin(dst_pred, ground_classes)
+
+        src_points = src_points[~src_mask]
+        dst_points = dst_points[~dst_mask]
+
+        # Clustering
+        # HDBSCAN
+        def clustering(points):
+            clusterer = hdbscan.HDBSCAN(algorithm="best", approx_min_span_tree=True, gen_min_span_tree=True,
+                                        metric="euclidean", min_cluster_size=config_icp_flow["min_cluster_size"], min_samples=None)
+
+            clusterer.fit(points[:, :3])
+            labels = clusterer.labels_.copy()
+
+            lbls, counts = np.unique(labels, return_counts=True)
+            cluster_info = np.array(list(zip(lbls[1:], counts[1:])))
+            cluster_info = cluster_info[cluster_info[:,1].argsort()]
+
+            clusters_labels = cluster_info[::-1][:config_icp_flow["num_clusters"], 0]
+            labels[np.in1d(labels, clusters_labels, invert=True)] = -1
+
+            return labels
+
+        # Ego motion
+        src_points = transform_pointcloud(src_points, batch["ego_motion"][0]["ego_motion"])
+        dst_points = transform_pointcloud(dst_points, batch["ego_motion"][1]["ego_motion"])
+
+        # ICP-Flow
+        if True:
+            src_labels = torch.tensor(clustering(src_points))
+            dst_labels = torch.tensor(clustering(dst_points))
+
+            src_points = src_points.to(device)
+            dst_points = dst_points.to(device)
+            src_labels = src_labels.to(device)
+            dst_labels = dst_labels.to(device)
+            pose = torch.eye(4).to(device)
+            with torch.autocast(device_type=device):
+                flow = flow_estimation(config_icp_flow, src_points, dst_points, src_labels, dst_labels, pose)
+             
+            # save
+            src_points = src_points.cpu().numpy()
+            dst_points = dst_points.cpu().numpy()
+            src_labels = src_labels.cpu().numpy()
+            dst_labels = dst_labels.cpu().numpy()
+            flow = flow.cpu().numpy()
+
+            data_src = np.concatenate((src_points, src_labels[:, None], flow), axis=1)
+            np.save("data_src.npy", data_src)
+            data_dst = np.concatenate((dst_points, dst_labels[:, None]), axis=1)
+            np.save("data_dst.npy", data_dst)
 
         break

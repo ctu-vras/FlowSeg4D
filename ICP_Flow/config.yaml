@@ -1,6 +1,6 @@
 # cluster parameters
 num_clusters: 100
-min_cluster_size: 30
+min_cluster_size: 10
 epsilon: 0.25
 
 # hist parameters
