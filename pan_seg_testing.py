@@ -8,10 +8,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from waffleiron import Segmenter
-from icp_flow import flow_estimation
 from ScaLR.datasets import LIST_DATASETS, Collate
 
-from pan_seg_utils import transform_pointcloud
+# from icp_flow import flow_estimation
+from pan_seg_utils import transform_pointcloud, get_semantic_clustering
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
@@ -260,21 +260,23 @@ if __name__ == "__main__":
 
     model.load_state_dict(new_ckpt)
 
-    model = model.cuda()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = model.to(device)
     model.eval()
 
     for i, batch in enumerate(trn_loader):
         # Network inputs
-        feat = batch["feat"].cuda()
-        labels = batch["labels_orig"].cuda()
-        batch["upsample"] = [up.cuda() for up in batch["upsample"]]
-        cell_ind = batch["cell_ind"].cuda()
-        occupied_cell = batch["occupied_cells"].cuda()
-        neighbors_emb = batch["neighbors_emb"].cuda()
+        feat = batch["feat"].to(device)
+        labels = batch["labels_orig"].to(device)
+        batch["upsample"] = [up.to(device) for up in batch["upsample"]]
+        cell_ind = batch["cell_ind"].to(device)
+        occupied_cell = batch["occupied_cells"].to(device)
+        neighbors_emb = batch["neighbors_emb"].to(device)
         net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
 
         # Get prediction and loss
-        with torch.autocast("cuda"):
+        with torch.autocast(device):
             with torch.no_grad():
                 out, tokens = model(*net_inputs)
             # Upsample to original resolution
@@ -291,7 +293,7 @@ if __name__ == "__main__":
         # box branch
         # tokens_channels = tokens.shape[1]
         # box_reg = torch.nn.Conv1d(tokens_channels, 7, 1)  # x, y, z, l, w, h, yaw
-        # box_reg = box_reg.half().cuda()  # float16
+        # box_reg = box_reg.half().to(device)  # float16
 
         # box_features = box_reg(tokens)
         # print("box_features - B x C x N: ", box_features.shape)
@@ -299,14 +301,14 @@ if __name__ == "__main__":
         # instance branch
         # K = 20
         # instance_reg = torch.nn.Conv1d(tokens_channels, K, 1)  # K instances
-        # instance_reg = instance_reg.half().cuda()  # float16
+        # instance_reg = instance_reg.half().to(device)  # float16
 
         # instance_features = instance_reg(tokens).softmax(dim=1)
         # instance_class = instance_features.argmax(dim=1)
         # print("instance_features - B x K x N: ", instance_features.shape)
 
         # box to point matching (dynamic to static)
-        # pcd = batch["feat"][-1, :, : out_upsample[-1].shape[0]].T.cuda()
+        # pcd = batch["feat"][-1, :, : out_upsample[-1].shape[0]].T.to(device)
         # pred = out_upsample[-1].argmax(dim=1)
         # pcd = torch.cat(
         #     (pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1
@@ -315,10 +317,10 @@ if __name__ == "__main__":
         # unique_vals, counts = torch.unique(pred, return_counts=True)
         # max_class = unique_vals[torch.argmax(counts)]
 
-        src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, :4]
-        src_points = torch.roll(src_points, -1, dims=1)[:,:3]
-        dst_points = batch["feat"][1, :, :out_upsample[1].shape[0]].T[:, :4]
-        dst_points = torch.roll(dst_points, -1, dims=1)[:,:3]
+        src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, 1:4]
+        src_points = src_points.to(device)
+        dst_points = batch["feat"][1, :, :out_upsample[1].shape[0]].T[:, 1:4]
+        dst_points = dst_points.to(device)
 
         # ground removal
         if False:
@@ -338,39 +340,35 @@ if __name__ == "__main__":
             non_ground = points[~mask][:,:3]
             np.save("non_ground_sem.npy", non_ground)
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
         ground_classes = torch.tensor([10, 11, 12, 13]).to(device)
-        src_pred = out_upsample[0].argmax(dim=1)
-        dst_pred = out_upsample[1].argmax(dim=1)
+        src_pred = out_upsample[0].argmax(dim=1).to(device)
+        dst_pred = out_upsample[1].argmax(dim=1).to(device)
 
-        src_mask = torch.isin(src_pred, ground_classes)
-        dst_mask = torch.isin(dst_pred, ground_classes)
+        # src_mask = torch.isin(src_pred, ground_classes)
+        # dst_mask = torch.isin(dst_pred, ground_classes)
 
-        src_points = src_points[~src_mask]
-        dst_points = dst_points[~dst_mask]
+        # src_points = src_points[~src_mask]
+        # dst_points = dst_points[~dst_mask]
 
         # Clustering
-        # HDBSCAN
-        def clustering(points):
-            clusterer = hdbscan.HDBSCAN(algorithm="best", approx_min_span_tree=True, gen_min_span_tree=True,
-                                        metric="euclidean", min_cluster_size=config_icp_flow["min_cluster_size"], min_samples=None)
+        src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
+        dst_points = torch.cat((dst_points, dst_pred.unsqueeze(1)), axis=1)
 
-            clusterer.fit(points[:, :3])
-            labels = clusterer.labels_.copy()
+        src_labels = get_semantic_clustering(src_points, config_icp_flow)
+        dst_labels = get_semantic_clustering(dst_points, config_icp_flow)
 
-            lbls, counts = np.unique(labels, return_counts=True)
-            cluster_info = np.array(list(zip(lbls[1:], counts[1:])))
-            cluster_info = cluster_info[cluster_info[:,1].argsort()]
+        src_points = torch.cat((src_points, src_labels.unsqueeze(1)), axis=1)
+        dst_points = torch.cat((dst_points, dst_labels.unsqueeze(1)), axis=1)
 
-            clusters_labels = cluster_info[::-1][:config_icp_flow["num_clusters"], 0]
-            labels[np.in1d(labels, clusters_labels, invert=True)] = -1
-
-            return labels
+        # save
+        src_points = src_points.cpu().numpy()
+        dst_points = dst_points.cpu().numpy()
+        np.save("data_src.npy", src_points)
+        np.save("data_dst.npy", dst_points)
 
         # Ego motion
-        src_points = transform_pointcloud(src_points, batch["ego_motion"][0]["ego_motion"])
-        dst_points = transform_pointcloud(dst_points, batch["ego_motion"][1]["ego_motion"])
+        # src_points = transform_pointcloud(src_points, batch["ego_motion"][0]["ego_motion"])
+        # dst_points = transform_pointcloud(dst_points, batch["ego_motion"][1]["ego_motion"])
 
         # ICP-Flow
         if False:

@@ -1,7 +1,8 @@
 # cluster parameters
+clustering_method: dbscan
 num_clusters: 100
-min_cluster_size: 10
-epsilon: 0.25
+min_cluster_size: 25
+epsilon: 2.5
 
 # hist parameters
 speed: 3.333
