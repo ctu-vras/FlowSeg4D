@@ -3,7 +3,6 @@ import yaml
 import argparse
 
 import torch
-import hdbscan
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -227,7 +226,7 @@ if __name__ == "__main__":
     args.workers = 0
 
     # --- Setup ICP-Flow
-    config_icp_flow = load_model_config("ICP_Flow/config.yaml")
+    config_panseg = load_model_config("config.yaml")
 
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
@@ -276,7 +275,7 @@ if __name__ == "__main__":
         net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
 
         # Get prediction and loss
-        with torch.autocast(device):
+        with torch.autocast(device_type=device):
             with torch.no_grad():
                 out, tokens = model(*net_inputs)
             # Upsample to original resolution
@@ -284,43 +283,16 @@ if __name__ == "__main__":
             for id_b, closest_point in enumerate(batch["upsample"]):
                 temp = out[id_b, :, closest_point]
                 out_upsample.append(temp.T)
-            # Loss
 
-        # reconstruct point clouds
-        for i in range(batch["feat"].shape[0]):
-            predictions = out_upsample[i].argmax(dim=1)
-
-        # box branch
-        # tokens_channels = tokens.shape[1]
-        # box_reg = torch.nn.Conv1d(tokens_channels, 7, 1)  # x, y, z, l, w, h, yaw
-        # box_reg = box_reg.half().to(device)  # float16
-
-        # box_features = box_reg(tokens)
-        # print("box_features - B x C x N: ", box_features.shape)
-
-        # instance branch
-        # K = 20
-        # instance_reg = torch.nn.Conv1d(tokens_channels, K, 1)  # K instances
-        # instance_reg = instance_reg.half().to(device)  # float16
-
-        # instance_features = instance_reg(tokens).softmax(dim=1)
-        # instance_class = instance_features.argmax(dim=1)
-        # print("instance_features - B x K x N: ", instance_features.shape)
-
-        # box to point matching (dynamic to static)
-        # pcd = batch["feat"][-1, :, : out_upsample[-1].shape[0]].T.to(device)
-        # pred = out_upsample[-1].argmax(dim=1)
-        # pcd = torch.cat(
-        #     (pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1
-        # )
-
-        # unique_vals, counts = torch.unique(pred, return_counts=True)
-        # max_class = unique_vals[torch.argmax(counts)]
-
+        # initialize point clouds
         src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, 1:4]
         src_points = src_points.to(device)
         dst_points = batch["feat"][1, :, :out_upsample[1].shape[0]].T[:, 1:4]
         dst_points = dst_points.to(device)
+
+        # ego motion
+        src_points_ego = transform_pointcloud(src_points[:, :3], batch["ego"][0]["ego_motion"])
+        dst_points_ego = transform_pointcloud(dst_points[:, :3], batch["ego"][1]["ego_motion"])
 
         # ground removal
         if False:
@@ -340,37 +312,21 @@ if __name__ == "__main__":
             non_ground = points[~mask][:,:3]
             np.save("non_ground_sem.npy", non_ground)
 
-        ground_classes = torch.tensor([10, 11, 12, 13]).to(device)
+        # semantic clustering
         src_pred = out_upsample[0].argmax(dim=1).to(device)
         dst_pred = out_upsample[1].argmax(dim=1).to(device)
 
-        # src_mask = torch.isin(src_pred, ground_classes)
-        # dst_mask = torch.isin(dst_pred, ground_classes)
-
-        # src_points = src_points[~src_mask]
-        # dst_points = dst_points[~dst_mask]
-
-        # Clustering
+        # clustering
         src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
         dst_points = torch.cat((dst_points, dst_pred.unsqueeze(1)), axis=1)
 
-        src_labels = get_semantic_clustering(src_points, config_icp_flow)
-        dst_labels = get_semantic_clustering(dst_points, config_icp_flow)
+        src_labels = get_semantic_clustering(src_points, config_panseg)
+        dst_labels = get_semantic_clustering(dst_points, config_panseg)
 
         src_points = torch.cat((src_points, src_labels.unsqueeze(1)), axis=1)
         dst_points = torch.cat((dst_points, dst_labels.unsqueeze(1)), axis=1)
 
-        # save
-        src_points = src_points.cpu().numpy()
-        dst_points = dst_points.cpu().numpy()
-        np.save("data_src.npy", src_points)
-        np.save("data_dst.npy", dst_points)
-
-        # Ego motion
-        # src_points = transform_pointcloud(src_points, batch["ego_motion"][0]["ego_motion"])
-        # dst_points = transform_pointcloud(dst_points, batch["ego_motion"][1]["ego_motion"])
-
-        # ICP-Flow
+        # scene flow
         if False:
             src_labels = torch.tensor(clustering(src_points))
             dst_labels = torch.tensor(clustering(dst_points))
@@ -383,16 +339,19 @@ if __name__ == "__main__":
             with torch.autocast(device_type=device):
                 flow = flow_estimation(config_icp_flow, src_points, dst_points, src_labels, dst_labels, pose)
              
-            # save
-            src_points = src_points.cpu().numpy()
-            dst_points = dst_points.cpu().numpy()
-            src_labels = src_labels.cpu().numpy()
-            dst_labels = dst_labels.cpu().numpy()
-            flow = flow.cpu().numpy()
+            # # save
+            # src_points = src_points.cpu().numpy()
+            # dst_points = dst_points.cpu().numpy()
+            # src_labels = src_labels.cpu().numpy()
+            # dst_labels = dst_labels.cpu().numpy()
+            # flow = flow.cpu().numpy()
 
-            data_src = np.concatenate((src_points, src_labels[:, None], flow), axis=1)
-            np.save("data_src.npy", data_src)
-            data_dst = np.concatenate((dst_points, dst_labels[:, None]), axis=1)
-            np.save("data_dst.npy", data_dst)
+            # data_src = np.concatenate((src_points, src_labels[:, None], flow), axis=1)
+            # np.save("data_src.npy", data_src)
+            # data_dst = np.concatenate((dst_points, dst_labels[:, None]), axis=1)
+            # np.save("data_dst.npy", data_dst)
+
+        # associate -- set temporally consistent instance id
+        # TODO
 
         break

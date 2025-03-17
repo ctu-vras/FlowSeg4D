@@ -5,7 +5,10 @@ import hdbscan
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-def transform_pointcloud(points: torch.Tensor, transform_matrix: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
+def transform_pointcloud(
+        points: torch.Tensor,
+        transform_matrix: Union[torch.Tensor, np.ndarray]
+    ) -> torch.Tensor:
     '''
     Returns the transformed pointcloud given the transformation matrix.
 
@@ -52,6 +55,8 @@ def get_semantic_clustering(points: torch.Tensor, config: dict) -> torch.Tensor:
         if config['clustering_method'] == 'hdbscan':
             class_labels = clustering_hdbscan(points_np[mask], config)
         else:
+            if config['clustering_method'] != 'dbscan':
+                print(f"Invalid clustering method: {config['clustering_method']}. Using DBSCAN instead.")
             class_labels = clustering_dbscan(points_np[mask], config)
 
         unique_labels = np.unique(class_labels)
@@ -76,7 +81,7 @@ def clustering_hdbscan(points, config):
     return clusterer.labels_.copy()
 
 def clustering_dbscan(points, config):
-    db = DBSCAN(eps=config['epsilon'], min_samples=config['min_cluster_size'])
-    db.fit(points[:, :3])
+    clusterer = DBSCAN(eps=config['epsilon'], min_samples=config['min_cluster_size'])
+    clusterer.fit(points[:, :3])
 
-    return db.labels_.copy()
+    return clusterer.labels_.copy()
