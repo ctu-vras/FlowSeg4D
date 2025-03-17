@@ -11,17 +11,10 @@ from waffleiron import Segmenter
 from icp_flow import flow_estimation
 from ScaLR.datasets import LIST_DATASETS, Collate
 
+from pan_seg_utils import transform_pointcloud
+
 torch.set_default_tensor_type(torch.FloatTensor)
 
-
-def transform_pointcloud(points, transform_matrix):
-    if not isinstance(transform_matrix, torch.Tensor):
-        transform_matrix = torch.tensor(transform_matrix, dtype=points.dtype,
-                                        device=points.device)
-    points_tr = torch.cat((points, torch.ones((points.shape[0], 1))), axis=1)
-    points_tr = torch.mm(transform_matrix, points_tr.T).T
-
-    return points_tr[:, :3]
 
 def get_default_parser():
     parser = argparse.ArgumentParser(description="Training")
@@ -296,31 +289,31 @@ if __name__ == "__main__":
             predictions = out_upsample[i].argmax(dim=1)
 
         # box branch
-        tokens_channels = tokens.shape[1]
-        box_reg = torch.nn.Conv1d(tokens_channels, 7, 1)  # x, y, z, l, w, h, yaw
-        box_reg = box_reg.half().cuda()  # float16
+        # tokens_channels = tokens.shape[1]
+        # box_reg = torch.nn.Conv1d(tokens_channels, 7, 1)  # x, y, z, l, w, h, yaw
+        # box_reg = box_reg.half().cuda()  # float16
 
-        box_features = box_reg(tokens)
-        print("box_features - B x C x N: ", box_features.shape)
+        # box_features = box_reg(tokens)
+        # print("box_features - B x C x N: ", box_features.shape)
 
         # instance branch
-        K = 20
-        instance_reg = torch.nn.Conv1d(tokens_channels, K, 1)  # K instances
-        instance_reg = instance_reg.half().cuda()  # float16
+        # K = 20
+        # instance_reg = torch.nn.Conv1d(tokens_channels, K, 1)  # K instances
+        # instance_reg = instance_reg.half().cuda()  # float16
 
-        instance_features = instance_reg(tokens).softmax(dim=1)
-        instance_class = instance_features.argmax(dim=1)
-        print("instance_features - B x K x N: ", instance_features.shape)
+        # instance_features = instance_reg(tokens).softmax(dim=1)
+        # instance_class = instance_features.argmax(dim=1)
+        # print("instance_features - B x K x N: ", instance_features.shape)
 
         # box to point matching (dynamic to static)
-        pcd = batch["feat"][-1, :, : out_upsample[-1].shape[0]].T.cuda()
-        pred = out_upsample[-1].argmax(dim=1)
-        pcd = torch.cat(
-            (pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1
-        )
+        # pcd = batch["feat"][-1, :, : out_upsample[-1].shape[0]].T.cuda()
+        # pred = out_upsample[-1].argmax(dim=1)
+        # pcd = torch.cat(
+        #     (pcd, instance_class[-1].unsqueeze(1), pred.unsqueeze(1)), axis=1
+        # )
 
-        unique_vals, counts = torch.unique(pred, return_counts=True)
-        max_class = unique_vals[torch.argmax(counts)]
+        # unique_vals, counts = torch.unique(pred, return_counts=True)
+        # max_class = unique_vals[torch.argmax(counts)]
 
         src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, :4]
         src_points = torch.roll(src_points, -1, dims=1)[:,:3]
@@ -380,7 +373,7 @@ if __name__ == "__main__":
         dst_points = transform_pointcloud(dst_points, batch["ego_motion"][1]["ego_motion"])
 
         # ICP-Flow
-        if True:
+        if False:
             src_labels = torch.tensor(clustering(src_points))
             dst_labels = torch.tensor(clustering(dst_points))
 
