@@ -4,13 +4,12 @@ import argparse
 
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
 
 from waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 # from icp_flow import flow_estimation
-from pan_seg_utils import transform_pointcloud, get_semantic_clustering
+from pan_seg_utils import transform_pointcloud, get_semantic_clustering, association
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
@@ -227,6 +226,8 @@ if __name__ == "__main__":
 
     # --- Setup ICP-Flow
     config_panseg = load_model_config("config.yaml")
+    config_panseg["num_classes"] = config["classif"]["nb_class"]
+    config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15]
 
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
@@ -291,8 +292,8 @@ if __name__ == "__main__":
         dst_points = dst_points.to(device)
 
         # ego motion
-        src_points_ego = transform_pointcloud(src_points[:, :3], batch["ego"][0]["ego_motion"])
-        dst_points_ego = transform_pointcloud(dst_points[:, :3], batch["ego"][1]["ego_motion"])
+        src_points_ego = transform_pointcloud(src_points[:, :3], batch["ego"][0].to(device))
+        dst_points_ego = transform_pointcloud(dst_points[:, :3], batch["ego"][1].to(device))
 
         # ground removal
         if False:
@@ -312,7 +313,7 @@ if __name__ == "__main__":
             non_ground = points[~mask][:,:3]
             np.save("non_ground_sem.npy", non_ground)
 
-        # semantic clustering
+        # semantic class
         src_pred = out_upsample[0].argmax(dim=1).to(device)
         dst_pred = out_upsample[1].argmax(dim=1).to(device)
 
@@ -323,10 +324,8 @@ if __name__ == "__main__":
         src_labels = get_semantic_clustering(src_points, config_panseg)
         dst_labels = get_semantic_clustering(dst_points, config_panseg)
 
-        src_points = torch.cat((src_points, src_labels.unsqueeze(1)), axis=1)
-        dst_points = torch.cat((dst_points, dst_labels.unsqueeze(1)), axis=1)
-
         # scene flow
+        # TODO: change for Let-It-Flow
         if False:
             src_labels = torch.tensor(clustering(src_points))
             dst_labels = torch.tensor(clustering(dst_points))
@@ -337,21 +336,19 @@ if __name__ == "__main__":
             dst_labels = dst_labels.to(device)
             pose = torch.eye(4).to(device)
             with torch.autocast(device_type=device):
-                flow = flow_estimation(config_icp_flow, src_points, dst_points, src_labels, dst_labels, pose)
-             
-            # # save
-            # src_points = src_points.cpu().numpy()
-            # dst_points = dst_points.cpu().numpy()
-            # src_labels = src_labels.cpu().numpy()
-            # dst_labels = dst_labels.cpu().numpy()
-            # flow = flow.cpu().numpy()
-
-            # data_src = np.concatenate((src_points, src_labels[:, None], flow), axis=1)
-            # np.save("data_src.npy", data_src)
-            # data_dst = np.concatenate((dst_points, dst_labels[:, None]), axis=1)
-            # np.save("data_dst.npy", data_dst)
+                flow = flow_estimation(config_panseg, src_points, dst_points, src_labels, dst_labels, pose)
 
         # associate -- set temporally consistent instance id
-        # TODO
+        src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
+        dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
+
+        ind_src, ind_dst = association(src_points, dst_points, config_panseg)
+
+        src_points = torch.cat((src_points, ind_src.unsqueeze(1)), axis=1)
+        dst_points = torch.cat((dst_points, ind_dst.unsqueeze(1)), axis=1)
+
+        # save
+        np.save("data_src.npy", src_points.cpu().numpy())
+        np.save("data_dst.npy", dst_points.cpu().numpy())
 
         break

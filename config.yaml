@@ -20,3 +20,6 @@ thres_box: 0.1
 thres_error: 0.1
 thres_iou: 0.1
 thres_rot: 0.1
+
+# association parameters
+max_dist: 0.5

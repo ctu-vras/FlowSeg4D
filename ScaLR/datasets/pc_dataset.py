@@ -168,7 +168,9 @@ class PCDataset(Dataset):
             _, upsample = kdtree.query(pc_orig[:, :3], k=1)
 
         try:
-            ego_motion = self.get_ego_motion(index)
+            data = self.get_ego_motion(index)
+            ego_motion = data["ego_motion"]
+            scene = data["scene"]
         except NotImplementedError:
             ego_motion = None
         except Exception as e:
@@ -191,6 +193,8 @@ class PCDataset(Dataset):
             filename,
             # Ego motion
             ego_motion,
+            # Scene
+            scene,
         )
 
         return out
@@ -229,7 +233,7 @@ class Collate:
 
         # Extract all data
         list_of_data = (list(data) for data in zip(*list_data))
-        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion = list_of_data
+        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene = list_of_data
 
         # Zero-pad point clouds
         Nmax = np.max([f.shape[-1] for f in feat])
@@ -254,6 +258,7 @@ class Collate:
         occupied_cells = torch.from_numpy(np.vstack(occupied_cells)).float()  # B x Nmax
         labels_orig = torch.from_numpy(np.hstack(label_orig)).long()
         upsample = [torch.from_numpy(u) for u in upsample]
+        ego_motion = [torch.from_numpy(e).float() for e in ego_motion]
 
         # Prepare output variables
         out = {
@@ -264,7 +269,8 @@ class Collate:
             "cell_ind": cell_ind,
             "occupied_cells": occupied_cells,
             "filename": filename,
-            "ego_motion": ego_motion,
+            "ego": ego_motion,
+            "scene": scene,
         }
 
         return out
