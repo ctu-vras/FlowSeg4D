@@ -111,6 +111,18 @@ def visualize_pcd(
     o3d.visualization.draw_geometries([pcd])
 
 
+def visualize_flow(points, labels=None):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points[:, :3])
+    if labels is None:
+        pass
+    else:
+        colors = labels / np.max(labels)
+        colors[labels < 0] = 0
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+    o3d.visualization.draw_geometries([pcd])
+
+
 def get_points_in_box(
     pcd: Union[torch.Tensor, np.ndarray], box: Union[torch.Tensor, np.ndarray]
 ):
