@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
 
-import yaml
 import argparse
-from functools import reduce
 
 import torch
 import numpy as np
 from waffleiron import Segmenter
-import ScaLR.utils.transforms as tr
 from ScaLR.datasets import LIST_DATASETS, Collate
 
-from pyquaternion import Quaternion
-from nuscenes.nuscenes import NuScenes
-from nuscenes.utils.data_classes import LidarPointCloud
-from nuscenes.utils.geometry_utils import transform_matrix
-
-from utils import remove_ego_vehicle, get_clusters
-
-K = 20
+from utils import remove_ego_vehicle
+from pan_seg_utils import load_model_config, transform_pointcloud, clustering_dbscan
 
 
 def get_default_parser():
@@ -157,11 +148,6 @@ def get_dataloader(train_dataset, val_dataset, args):
 
     return train_loader, val_loader, train_sampler
 
-def load_model_config(file):
-    with open(file, "r") as f:
-        config = yaml.safe_load(f)
-    return config
-
 if __name__ == "__main__":
 
     parser = get_default_parser()
@@ -227,7 +213,6 @@ if __name__ == "__main__":
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
     trn_loader, val_loader, _ = get_dataloader(train_dataset, val_dataset, args)
-    nusc = NuScenes(version="v1.0-trainval", dataroot=args.path_dataset, verbose=False)
 
     # Load pretrained model
     ckpt = torch.load(args.pretrained_ckpt, map_location="cpu")
@@ -260,46 +245,21 @@ if __name__ == "__main__":
     model.eval()
 
     # Initialize an empty list to store the aggregated point cloud
-    points = np.zeros((3, 0))
+    points = torch.zeros((0, 3))
+    config_cluster = {"epsilon" : 2.5, "min_cluster_size" : 15}
 
     curr_scene = None
     for i, batch in enumerate(trn_loader):
         sample_data = None
-        for sd in nusc.sample_data:
-            if sd['token'] == batch["filename"][0]:
-                sample_data = sd
-                break
-        if sample_data is None:
-            print(f"[ERROR]: sample data is None for file {batch['filename']}")
-            continue
-
-        sample = nusc.get('sample', sample_data['sample_token'])
-        if sample is None:
-            print(f"[ERROR]: sample is None for file {batch['filename']}")
-            continue
-
-        scene = nusc.get('scene', sample['scene_token'])
+        scene = batch["scene"][0]
 
         if curr_scene is not None and curr_scene != scene["name"]:
-            np.save("exports/" + curr_scene, points.T)
-            points = np.zeros((3, 0))
+            np.save("exports/" + curr_scene, points.cpu().numpy())
+            points = torch.zeros((0, 3))
             curr_scene = None
         if curr_scene is None:
             curr_scene = scene["name"]
             print(f"[INFO]: New scene: {curr_scene}")
-
-            # Get reference pose
-            ref_sd_token = sample['data']['LIDAR_TOP']
-            ref_sd_rec = nusc.get('sample_data', ref_sd_token)
-            ref_pose_rec = nusc.get('ego_pose', ref_sd_rec['ego_pose_token'])
-            ref_cs_rec = nusc.get('calibrated_sensor', ref_sd_rec['calibrated_sensor_token'])
-
-            # Homogeneous transform from ego car frame to reference frame.
-            ref_from_car = transform_matrix(ref_cs_rec['translation'], Quaternion(ref_cs_rec['rotation']), inverse=True)
-
-            # Homogeneous transformation matrix from global to _current_ ego car frame.
-            car_from_global = transform_matrix(ref_pose_rec['translation'], Quaternion(ref_pose_rec['rotation']),
-                                            inverse=True)
 
         # Network inputs
         feat = batch["feat"].to(device)
@@ -321,14 +281,6 @@ if __name__ == "__main__":
                 temp = out[id_b, :, closest_point]
                 out_upsample.append(temp.T)
 
-        # reconstruct point clouds
-        sample_data_token = sample['data']['LIDAR_TOP']
-        current_sd_rec = nusc.get('sample_data', sample_data_token)
-        while current_sd_rec:
-            if current_sd_rec["token"] == batch["filename"][0]:
-                break
-            current_sd_rec = nusc.get('sample_data', current_sd_rec['next'])
-
         for j in range(batch['feat'].shape[0]):
             predictions = out_upsample[j].argmax(dim=1)
 
@@ -336,28 +288,16 @@ if __name__ == "__main__":
             _, mask = remove_ego_vehicle(pcd, "nuscenes")
             pcd, pred = pcd[mask], predictions[mask]
 
-            mask = (pred == 3).cpu().numpy()  # Car class
-            pcd = pcd[mask].cpu().numpy()
+            mask = (pred == 3)  # Car class
+            pcd = pcd[mask]
+
             pcd = pcd[:, [1, 2, 3]]
+            trans_matrix = batch["ego"][0]
+            pcd = transform_pointcloud(pcd, trans_matrix)
 
-            # Get past pose.
-            current_pose_rec = nusc.get('ego_pose', current_sd_rec['ego_pose_token'])
-            global_from_car = transform_matrix(current_pose_rec['translation'],
-                                               Quaternion(current_pose_rec['rotation']), inverse=False)
-
-            # Homogeneous transformation matrix from sensor coordinate frame to ego car frame.
-            current_cs_rec = nusc.get('calibrated_sensor', current_sd_rec['calibrated_sensor_token'])
-            car_from_current = transform_matrix(current_cs_rec['translation'], Quaternion(current_cs_rec['rotation']),
-                                                inverse=False)
-
-            labels = get_clusters(pcd, eps=2.5, min_points=15)
+            if pcd.shape[0] == 0:
+                continue
+            labels = clustering_dbscan(pcd, config_cluster)
             pcd = pcd[labels != -1]
-            pcd = np.c_[pcd, np.ones((pcd.shape[0], 1))]
-            # print(pcd.shape)
 
-            # Fuse four transformation matrices into one and perform transform.
-            pcd = LidarPointCloud(pcd.T)
-            trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
-            pcd.transform(trans_matrix)
-
-            points = np.hstack((points, pcd.points[:3, :]))
+            points = torch.cat((points, pcd), axis=0)

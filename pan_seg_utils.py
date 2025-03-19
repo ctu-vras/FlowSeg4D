@@ -102,14 +102,24 @@ def clustering_hdbscan(points, config):
         min_cluster_size=config["min_cluster_size"],
         min_samples=None,
     )
-    clusterer.fit(points[:, :3])
+
+    if isinstance(points, torch.Tensor):
+        points_ = points.cpu().numpy().copy()
+    else:
+        points_ = points.copy()
+    clusterer.fit(points_[:, :3])
 
     return clusterer.labels_.copy()
 
 
 def clustering_dbscan(points, config):
     clusterer = DBSCAN(eps=config["epsilon"], min_samples=config["min_cluster_size"])
-    clusterer.fit(points[:, :3])
+
+    if isinstance(points, torch.Tensor):
+        points_ = points.cpu().numpy().copy()
+    else:
+        points_ = points.copy()
+    clusterer.fit(points_[:, :3])
 
     return clusterer.labels_.copy()
 
@@ -186,6 +196,7 @@ def association(
 
         dists = torch.cdist(centers_t1, centers_t2)
         # associate using hungarian matching
+        # TODO: use different algorithm allowing for backpropagation
         row_ind, col_ind = linear_sum_assignment(dists.cpu().numpy())
         for i, j in zip(row_ind, col_ind):
             mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
