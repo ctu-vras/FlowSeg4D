@@ -22,4 +22,4 @@ thres_iou: 0.1
 thres_rot: 0.1
 
 # association parameters
-max_dist: 0.5
+max_dist: 1.5

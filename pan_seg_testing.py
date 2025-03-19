@@ -1,5 +1,4 @@
 import os
-import yaml
 import argparse
 
 import torch
@@ -9,6 +8,7 @@ from waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 # from icp_flow import flow_estimation
+from pan_seg_utils import load_model_config
 from pan_seg_utils import transform_pointcloud, get_semantic_clustering, association
 
 torch.set_default_tensor_type(torch.FloatTensor)
@@ -157,12 +157,6 @@ def get_dataloader(train_dataset, val_dataset, args):
     )
 
     return train_loader, val_loader, train_sampler
-
-
-def load_model_config(file):
-    with open(file, "r") as f:
-        config = yaml.safe_load(f)
-    return config
 
 
 if __name__ == "__main__":
