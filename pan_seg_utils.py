@@ -168,7 +168,7 @@ def association(
     indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32)
     indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32)
 
-    curr_id = 1
+    curr_id = 1 if ind_cache is None else ind_cache["max_id"] + 1
 
     for class_id in config["fore_classes"]:
         centers_t1, clusters_t1 = get_centers_for_class(points_t1, class_id)
@@ -202,12 +202,13 @@ def association(
             mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
             mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[j])
             if dists[i, j] > config["max_dist"]:  # threshold for association
-                indices_t1[mask_t1] = curr_id
-                curr_id += 1
+                indices_t1[mask_t1] = curr_id if prev_ind is None else prev_ind[mask_t1][0]
+                curr_id += 1 if prev_ind is None else 0
                 indices_t2[mask_t2] = curr_id
             else:
-                indices_t1[mask_t1] = curr_id
-                indices_t2[mask_t2] = curr_id
+                id_val = curr_id if prev_ind is None else prev_ind[mask_t1][0]
+                indices_t1[mask_t1] = id_val
+                indices_t2[mask_t2] = id_val
             curr_id += 1
 
     indices_t1 = indices_t1.to(points_t1.device)
