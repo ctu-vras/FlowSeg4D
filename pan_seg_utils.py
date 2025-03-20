@@ -177,27 +177,27 @@ def association(
         class_mask_t1 = points_t1[:, -2] == class_id
         class_mask_t2 = points_t2[:, -2] == class_id
 
-        if (
-            clusters_t1.shape[0] == 0 and clusters_t2.shape[0] == 0
-        ):  # no clusters in both frames
+        if clusters_t1.numel() == 0 and clusters_t2.numel() == 0:
             continue
-        if clusters_t1.shape[0] == 0:  # no clusters in t1
-            for cluster_id in clusters_t2:
-                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
-                indices_t2[mask] = curr_id
-                curr_id += 1
+
+        if clusters_t1.numel() == 0:
+            indices_t2[class_mask_t2] = torch.arange(curr_id, curr_id + clusters_t2.numel(), device=points_t2.device)
+            curr_id += clusters_t2.numel()
             continue
-        if clusters_t2.shape[0] == 0:  # no clusters in t2
-            for cluster_id in clusters_t1:
-                mask = (class_mask_t1) & (points_t1[:, -1] == cluster_id)
-                indices_t1[mask] = curr_id
-                curr_id += 1
+
+        if clusters_t2.numel() == 0:
+            if prev_ind is None:
+                indices_t1[class_mask_t1] = torch.arange(curr_id, curr_id + clusters_t1.numel(), device=points_t1.device)
+                curr_id += clusters_t1.numel()
+            else:
+                indices_t1[class_mask_t1] = prev_ind[class_mask_t1][0]
             continue
 
         dists = torch.cdist(centers_t1, centers_t2)
         # associate using hungarian matching
         # TODO: use different algorithm allowing for backpropagation
         row_ind, col_ind = linear_sum_assignment(dists.cpu().numpy())
+        used_row, used_col = set(row_ind), set(col_ind)
         for i, j in zip(row_ind, col_ind):
             mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
             mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[j])
@@ -205,11 +205,30 @@ def association(
                 indices_t1[mask_t1] = curr_id if prev_ind is None else prev_ind[mask_t1][0]
                 curr_id += 1 if prev_ind is None else 0
                 indices_t2[mask_t2] = curr_id
+                curr_id += 1
             else:
                 id_val = curr_id if prev_ind is None else prev_ind[mask_t1][0]
                 indices_t1[mask_t1] = id_val
                 indices_t2[mask_t2] = id_val
-            curr_id += 1
+                curr_id += 1 if prev_ind is None else 0
+
+        if centers_t1.shape[0] > centers_t2.shape[0]:
+            for i, cluster_id in enumerate(clusters_t1):
+                if i in used_row:
+                    continue
+                mask = (class_mask_t1) & (points_t1[:, -1] == cluster_id)
+                if prev_ind is None:
+                    indices_t1[mask] = curr_id
+                    curr_id += 1
+                else:
+                    indices_t1[mask] = prev_ind[mask][0]
+        elif centers_t1.shape[0] < centers_t2.shape[0]:
+            for j, cluster_id in enumerate(clusters_t2):
+                if j in used_col:
+                    continue
+                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
+                indices_t2[mask] = curr_id
+                curr_id += 1
 
     indices_t1 = indices_t1.to(points_t1.device)
     indices_t2 = indices_t2.to(points_t2.device)
