@@ -286,7 +286,7 @@ if __name__ == "__main__":
 
         # initialize point clouds
         if prev_scene is not None:
-            print(f"Current scene: {prev_scene['token']}")
+            print(f"Prev scene: {prev_scene['token']}")
 
         src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, 1:4]
         src_points = src_points.to(device)
@@ -348,6 +348,9 @@ if __name__ == "__main__":
             if prev_scene["token"] == batch["scene"][0]["token"]:
                 test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache)
                 ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
+                if not torch.allclose(test, prev_ind):
+                    print(prev_ind[prev_ind != test])
+                    print(test[prev_ind != test])
                 prev_ind = ind_src
             else:
                 prev_ind = None
@@ -365,7 +368,7 @@ if __name__ == "__main__":
         # save
         # src_points = torch.cat((src_points, ind_src.unsqueeze(1)), axis=1)
         # dst_points = torch.cat((dst_points, ind_dst.unsqueeze(1)), axis=1)
-        # np.save("data_src.npy", src_points.cpu().numpy())
-        # np.save("data_dst.npy", dst_points.cpu().numpy())
+        # np.save(f"data_src_{i}.npy", src_points.cpu().numpy())
+        # np.save(f"data_dst_{i}.npy", dst_points.cpu().numpy())
 
         # break

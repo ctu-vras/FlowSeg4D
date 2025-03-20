@@ -181,16 +181,20 @@ def association(
             continue
 
         if clusters_t1.numel() == 0:
-            indices_t2[class_mask_t2] = torch.arange(curr_id, curr_id + clusters_t2.numel(), device=points_t2.device)
-            curr_id += clusters_t2.numel()
+            for cluster_id in clusters_t2:
+                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
+                indices_t2[mask] = curr_id
+                curr_id += 1
             continue
 
         if clusters_t2.numel() == 0:
-            if prev_ind is None:
-                indices_t1[class_mask_t1] = torch.arange(curr_id, curr_id + clusters_t1.numel(), device=points_t1.device)
-                curr_id += clusters_t1.numel()
-            else:
-                indices_t1[class_mask_t1] = prev_ind[class_mask_t1][0]
+            for cluster_id in clusters_t1:
+                mask = (class_mask_t1) & (points_t1[:, -1] == cluster_id)
+                if prev_ind is None:
+                    indices_t1[mask] = curr_id
+                    curr_id += 1
+                else:
+                    indices_t1[mask] = prev_ind[mask][0]
             continue
 
         dists = torch.cdist(centers_t1, centers_t2)
@@ -229,6 +233,8 @@ def association(
                 mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
                 curr_id += 1
+        else:
+            continue
 
     indices_t1 = indices_t1.to(points_t1.device)
     indices_t2 = indices_t2.to(points_t2.device)
