@@ -66,7 +66,7 @@ class NuScenesSemSeg(PCDataset):
     def __init__(self, ratio="100p", **kwargs):
         super().__init__(**kwargs)
 
-        self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.rootdir, verbose=False)
+        self.nusc = NuScenes(version="v1.0-mini", dataroot=self.rootdir, verbose=False)
 
         # For normalizing intensities
         self.mean_int = MEAN_INT
@@ -155,7 +155,7 @@ class NuScenesSemSeg(PCDataset):
 
         trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
 
-        return {'ego_motion': trans_matrix, 'scene': scene}
+        return {'ego_motion': trans_matrix, 'scene': scene, 'sample': sample}
 
     def get_ego_motion(self, index):
         ego_motion = self.get_ego_motion_from_filename(self.list_frames[index][0])

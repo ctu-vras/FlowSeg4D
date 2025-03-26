@@ -171,6 +171,7 @@ class PCDataset(Dataset):
             data = self.get_ego_motion(index)
             ego_motion = data["ego_motion"]
             scene = data["scene"]
+            sample = data["sample"]
         except NotImplementedError:
             ego_motion = None
         except Exception as e:
@@ -195,6 +196,8 @@ class PCDataset(Dataset):
             ego_motion,
             # Scene
             scene,
+            # Sample
+            sample,
         )
 
         return out
@@ -233,7 +236,7 @@ class Collate:
 
         # Extract all data
         list_of_data = (list(data) for data in zip(*list_data))
-        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene = list_of_data
+        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, sample = list_of_data
 
         # Zero-pad point clouds
         Nmax = np.max([f.shape[-1] for f in feat])
@@ -271,6 +274,7 @@ class Collate:
             "filename": filename,
             "ego": ego_motion,
             "scene": scene,
+            "sample": sample,
         }
 
         return out

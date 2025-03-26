@@ -1,13 +1,13 @@
-import os
 import argparse
 
 import torch
 import numpy as np
 
 from waffleiron import Segmenter
+from nuscenes.nuscenes import NuScenes
 from ScaLR.datasets import LIST_DATASETS, Collate
 
-# from icp_flow import flow_estimation
+from eval import EvalPQ4D
 from pan_seg_utils import load_model_config
 from pan_seg_utils import transform_pointcloud, get_semantic_clustering, association
 
@@ -19,14 +19,14 @@ def get_default_parser():
     parser.add_argument(
         "--dataset",
         type=str,
-        help="Path to dataset",
+        help="Dataset name",
         default="nuscenes",
     )
     parser.add_argument(
         "--path_dataset",
         type=str,
         help="Path to dataset",
-        default="/mnt/data/Public_datasets/nuScenes/",
+        default="/mnt/data/vras/data/nuScenes-panoptic/",
     )
     parser.add_argument(
         "--log_path",
@@ -163,6 +163,8 @@ if __name__ == "__main__":
     parser = get_default_parser()
     args = parser.parse_args()
 
+    nusc = NuScenes(version="v1.0-mini", dataroot=args.path_dataset, verbose=True)
+
     # Load config files
     config = load_model_config(args.config_downstream)
     config_pretrain = load_model_config(args.config_pretrain)
@@ -264,6 +266,9 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
+    evaluator = EvalPQ4D(config["classif"]["nb_class"])
+    seq = 0
+
     for i, batch in enumerate(trn_loader):
         # Network inputs
         feat = batch["feat"].to(device)
@@ -288,87 +293,110 @@ if __name__ == "__main__":
         if prev_scene is not None:
             print(f"Prev scene: {prev_scene['token']}")
 
-        src_points = batch["feat"][0, :, :out_upsample[0].shape[0]].T[:, 1:4]
-        src_points = src_points.to(device)
-        dst_points = batch["feat"][1, :, :out_upsample[1].shape[0]].T[:, 1:4]
-        dst_points = dst_points.to(device)
-
-        # ego motion
-        src_points_ego = transform_pointcloud(src_points[:, :3], batch["ego"][0].to(device))
-        dst_points_ego = transform_pointcloud(dst_points[:, :3], batch["ego"][1].to(device))
-
-        # ground removal
-        if False:
-            # pypatchworkpp
-            import pypatchworkpp
-
-            params = pypatchworkpp.Parameters()
-            grnd = pypatchworkpp.patchworkpp(params)
-            grnd.estimateGround(points)
-            non_ground = grnd.getNonground()
-            np.save("non_ground_ppp.npy", non_ground)
-
-            # semantic
-            ground_classes = [10, 11, 12, 13]
-            pred = pred.cpu().numpy()
-            mask = np.isin(pred, ground_classes)
-            non_ground = points[~mask][:,:3]
-            np.save("non_ground_sem.npy", non_ground)
-
-        # semantic class
-        src_pred = out_upsample[0].argmax(dim=1).to(device)
-        dst_pred = out_upsample[1].argmax(dim=1).to(device)
-
-        # clustering
-        src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
-        dst_points = torch.cat((dst_points, dst_pred.unsqueeze(1)), axis=1)
-
-        src_labels = get_semantic_clustering(src_points, config_panseg)
-        dst_labels = get_semantic_clustering(dst_points, config_panseg)
-
-        # scene flow
-        # TODO: change for Let-It-Flow
-        if False:
-            src_labels = torch.tensor(clustering(src_points))
-            dst_labels = torch.tensor(clustering(dst_points))
-
+        predictions = {}
+        instances = {}
+        for src_id, dst_id in zip(range(0, args.batch_size - 1), range(1, args.batch_size)):
+            src_points = batch["feat"][src_id, :, :out_upsample[src_id].shape[0]].T[:, 1:4]
             src_points = src_points.to(device)
+            dst_points = batch["feat"][dst_id, :, :out_upsample[dst_id].shape[0]].T[:, 1:4]
             dst_points = dst_points.to(device)
-            src_labels = src_labels.to(device)
-            dst_labels = dst_labels.to(device)
-            pose = torch.eye(4).to(device)
-            with torch.autocast(device_type=device):
-                flow = flow_estimation(config_panseg, src_points, dst_points, src_labels, dst_labels, pose)
 
-        # associate -- set temporally consistent instance id
-        src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
-        dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
+            # ego motion
+            src_points_ego = transform_pointcloud(src_points[:, :3], batch["ego"][src_id].to(device))
+            dst_points_ego = transform_pointcloud(dst_points[:, :3], batch["ego"][dst_id].to(device))
 
-        if prev_ind is not None:
-            if prev_scene["token"] == batch["scene"][0]["token"]:
-                test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache)
-                ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
-                if not torch.allclose(test, prev_ind):
-                    print(prev_ind[prev_ind != test])
-                    print(test[prev_ind != test])
-                prev_ind = ind_src
+            # ground removal
+            if False:
+                # pypatchworkpp
+                import pypatchworkpp
+
+                params = pypatchworkpp.Parameters()
+                grnd = pypatchworkpp.patchworkpp(params)
+                grnd.estimateGround(points)
+                non_ground = grnd.getNonground()
+                np.save("non_ground_ppp.npy", non_ground)
+
+                # semantic
+                ground_classes = [10, 11, 12, 13]
+                pred = pred.cpu().numpy()
+                mask = np.isin(pred, ground_classes)
+                non_ground = points[~mask][:,:3]
+                np.save("non_ground_sem.npy", non_ground)
+
+            # semantic class
+            src_pred = out_upsample[src_id].argmax(dim=1).to(device)
+            dst_pred = out_upsample[dst_id].argmax(dim=1).to(device)
+
+            # clustering
+            src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
+            dst_points = torch.cat((dst_points, dst_pred.unsqueeze(1)), axis=1)
+
+            src_labels = get_semantic_clustering(src_points, config_panseg)
+            dst_labels = get_semantic_clustering(dst_points, config_panseg)
+
+            # scene flow
+            # TODO: change for Let-It-Flow
+            if False:
+                src_labels = torch.tensor(clustering(src_points))
+                dst_labels = torch.tensor(clustering(dst_points))
+
+                src_points = src_points.to(device)
+                dst_points = dst_points.to(device)
+                src_labels = src_labels.to(device)
+                dst_labels = dst_labels.to(device)
+                pose = torch.eye(4).to(device)
+                with torch.autocast(device_type=device):
+                    flow = flow_estimation(config_panseg, src_points, dst_points, src_labels, dst_labels, pose)
+
+            # associate -- set temporally consistent instance id
+            src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
+            dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
+
+            if prev_ind is not None:
+                if prev_scene["token"] == batch["scene"][src_id]["token"]:
+                    test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache)
+                    ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
+                    prev_ind = ind_src
+                else:
+                    prev_ind = None
+                    ind_cache = {"max_id": 0}
+            if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
+                ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache)
+                ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
+                prev_ind = ind_dst
             else:
                 prev_ind = None
                 ind_cache = {"max_id": 0}
-        if batch["scene"][0]["token"] == batch["scene"][1]["token"]:
-            ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache)
-            ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
-            prev_ind = ind_dst
-        else:
-            prev_ind = None
-            ind_cache = {"max_id": 0}
-        prev_points = dst_points
-        prev_scene = batch["scene"][1]
+            prev_points = dst_points
+            prev_scene = batch["scene"][dst_id]
 
-        # save
-        # src_points = torch.cat((src_points, ind_src.unsqueeze(1)), axis=1)
-        # dst_points = torch.cat((dst_points, ind_dst.unsqueeze(1)), axis=1)
-        # np.save(f"data_src_{i}.npy", src_points.cpu().numpy())
-        # np.save(f"data_dst_{i}.npy", dst_points.cpu().numpy())
+            if src_id not in predictions:
+                predictions[src_id] = src_pred.cpu().numpy()
+                instances[src_id] = ind_src.cpu().numpy()
+            predictions[dst_id] = dst_pred.cpu().numpy()
+            instances[dst_id] = ind_dst.cpu().numpy()
 
-        # break
+        # get ground truth and update evaluation
+        for i in range(args.batch_size):
+            lidar_token = nusc.get("sample_data", batch["sample"][i]["data"]["LIDAR_TOP"])
+            panoptic_path = nusc.get('panoptic', lidar_token)['filename']
+            panoptic_labels = np.fromfile(f"{args.path_dataset}/{panoptic_path}", dtype=np.uint16)
+
+            lidarseq_labels = panoptic_labels // 1000
+            instance_labels = panoptic_labels % 1000
+
+            evaluator.update(
+                seq,
+                predictions[i],
+                instances[i],
+                lidarseq_labels,
+                instance_labels,
+            )
+            seq += 1
+
+        PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
+        print(f"Scene: {batch['scene'][0]['name']}, {batch['scene'][1]['name']}")
+        print(f"PQ4D: {PQ4D}, AQ_ovr: {AQ_ovr}, AQ: {AQ}, AQ_p: {AQ_p}, AQ_r: {AQ_r}")
+        print(f"iou: {iou}, iou_mean: {iou_mean}, iou_p: {iou_p}, iou_r: {iou_r}")
+
+        break

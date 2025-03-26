@@ -2,7 +2,7 @@ import numpy as np
 
 OFFSET = 2 ** 32
 
-class Eval:
+class EvalPQ4D:
     def __init__(self, num_classes, ignore=None, offset=OFFSET, min_points=30):
         self.num_classes = num_classes
         ignore = ignore or []
@@ -92,8 +92,8 @@ class Eval:
             gt_sem = gt_sem[gt_mask]
             gt_inst = gt_inst[gt_mask]
 
+        cl_preds = self.preds[seq]
         for class_id in self.include:
-            cl_preds = self.preds[seq]
             cl_gts = self.gts[seq][class_id]
             cl_intersects = self.intersects[seq][class_id]
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     inst_pred[10:] = 2
 
     # evaluator
-    class_evaluator = Eval(3, ignore, OFFSET, 1)
+    class_evaluator = EvalPQ4D(3, ignore, OFFSET, 1)
     class_evaluator.update(1, sem_pred, inst_pred, sem_gt, inst_gt)
     PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = class_evaluator.compute()
     np.testing.assert_equal(PQ4D, np.sqrt(1.0/3))
