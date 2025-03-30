@@ -133,6 +133,9 @@ class PCDataset(Dataset):
     def get_ego_motion(self, index):
         raise NotImplementedError
 
+    def get_panoptic_labels(self, index):
+        raise NotImplementedError
+
     def __len__(self):
         raise NotImplementedError()
 
@@ -159,7 +162,7 @@ class PCDataset(Dataset):
         # Get neighbors for point embedding layer providing tokens to waffleiron backbone
         kdtree = KDTree(pc[:, :3])
         assert pc.shape[0] > self.num_neighbors
-        dist, neighbors_emb = kdtree.query(pc[:, :3], k=self.num_neighbors + 1)
+        _, neighbors_emb = kdtree.query(pc[:, :3], k=self.num_neighbors + 1)
 
         # Nearest neighbor interpolation to undo cropping & voxelisation at validation time
         if self.phase in ["train", "trainval"]:
@@ -171,12 +174,19 @@ class PCDataset(Dataset):
             data = self.get_ego_motion(index)
             ego_motion = data["ego_motion"]
             scene = data["scene"]
-            sample = data["sample"]
         except NotImplementedError:
             ego_motion = None
         except Exception as e:
             print(e)
             ego_motion = None
+
+        try:
+            panoptic_labels = self.get_panoptic_labels(index)
+        except NotImplementedError:
+            panoptic_labels = None
+        except Exception as e:
+            print(e)
+            panoptic_labels = None
 
         # Output to return
         out = (
@@ -196,8 +206,8 @@ class PCDataset(Dataset):
             ego_motion,
             # Scene
             scene,
-            # Sample
-            sample,
+            # Panoptic labels
+            panoptic_labels,
         )
 
         return out
@@ -236,7 +246,7 @@ class Collate:
 
         # Extract all data
         list_of_data = (list(data) for data in zip(*list_data))
-        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, sample = list_of_data
+        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, panoptic_labels = list_of_data
 
         # Zero-pad point clouds
         Nmax = np.max([f.shape[-1] for f in feat])
@@ -274,7 +284,7 @@ class Collate:
             "filename": filename,
             "ego": ego_motion,
             "scene": scene,
-            "sample": sample,
+            "panoptic_labels": panoptic_labels,
         }
 
         return out

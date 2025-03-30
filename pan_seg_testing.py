@@ -1,10 +1,10 @@
+import os
 import argparse
 
 import torch
 import numpy as np
 
 from waffleiron import Segmenter
-from nuscenes.nuscenes import NuScenes
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 from eval import EvalPQ4D
@@ -13,6 +13,16 @@ from pan_seg_utils import transform_pointcloud, get_semantic_clustering, associa
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
+
+class ClassMapper:
+    def __init__(self):
+        current_folder = os.path.dirname(os.path.realpath(__file__))
+        self.mapping = np.load(
+            os.path.join(current_folder, "configs/mapping_class_index_nuscenes.npy")
+        )
+
+    def get_index(self, x):
+        return self.mapping[x] if x < len(self.mapping) else 0
 
 def get_default_parser():
     parser = argparse.ArgumentParser(description="Training")
@@ -90,10 +100,7 @@ def get_default_parser():
         default=False,
         help="Linear probing",
     )
-    parser.add_argument("--eps", type=float, default=2.5, help="DBSCAN epsilon")
-    parser.add_argument(
-        "--min_points", type=int, default=15, help="DBSCAN minimum points"
-    )
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
 
     return parser
 
@@ -163,7 +170,7 @@ if __name__ == "__main__":
     parser = get_default_parser()
     args = parser.parse_args()
 
-    nusc = NuScenes(version="v1.0-mini", dataroot=args.path_dataset, verbose=True)
+    mapper = np.vectorize(ClassMapper().get_index)
 
     # Load config files
     config = load_model_config(args.config_downstream)
@@ -217,13 +224,13 @@ if __name__ == "__main__":
         layer_norm=config["waffleiron"]["layernorm"],
     )
 
-    args.batch_size = 2
     args.workers = 0
 
     # --- Setup ICP-Flow
-    config_panseg = load_model_config("config.yaml")
+    config_panseg = load_model_config("configs/config.yaml")
     config_panseg["num_classes"] = config["classif"]["nb_class"]
     config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15]
+    config_panseg["ignore_classes"] = [10, 11, 12, 13]
 
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
@@ -266,11 +273,10 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
-    evaluator = EvalPQ4D(config["classif"]["nb_class"])
-    seq = 0
+    evaluator = EvalPQ4D(config["classif"]["nb_class"], config_panseg["ignore_classes"])
 
-    for i, batch in enumerate(trn_loader):
-        # Network inputs
+    for i, batch in enumerate(val_loader):
+        # network inputs
         feat = batch["feat"].to(device)
         labels = batch["labels_orig"].to(device)
         batch["upsample"] = [up.to(device) for up in batch["upsample"]]
@@ -279,26 +285,24 @@ if __name__ == "__main__":
         neighbors_emb = batch["neighbors_emb"].to(device)
         net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
 
-        # Get prediction and loss
+        # get semantic class prediction
         with torch.autocast(device_type=device):
             with torch.no_grad():
                 out, tokens = model(*net_inputs)
-            # Upsample to original resolution
+            # upsample to original resolution
             out_upsample = []
             for id_b, closest_point in enumerate(batch["upsample"]):
                 temp = out[id_b, :, closest_point]
                 out_upsample.append(temp.T)
 
-        # initialize point clouds
-        if prev_scene is not None:
-            print(f"Prev scene: {prev_scene['token']}")
-
+        # get instance prediction
         predictions = {}
         instances = {}
-        for src_id, dst_id in zip(range(0, args.batch_size - 1), range(1, args.batch_size)):
-            src_points = batch["feat"][src_id, :, :out_upsample[src_id].shape[0]].T[:, 1:4]
+        batch_size = batch["feat"].shape[0]
+        for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
+            src_points = batch["feat"][src_id, :, batch["upsample"][src_id]].T[:, 1:4]
             src_points = src_points.to(device)
-            dst_points = batch["feat"][dst_id, :, :out_upsample[dst_id].shape[0]].T[:, 1:4]
+            dst_points = batch["feat"][dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
             dst_points = dst_points.to(device)
 
             # ego motion
@@ -352,6 +356,7 @@ if __name__ == "__main__":
             src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
             dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
 
+            ind_src, ind_dst = None, None
             if prev_ind is not None:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
                     test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache)
@@ -370,33 +375,52 @@ if __name__ == "__main__":
             prev_points = dst_points
             prev_scene = batch["scene"][dst_id]
 
-            if src_id not in predictions:
+            if ind_src is not None and src_id not in predictions:
                 predictions[src_id] = src_pred.cpu().numpy()
                 instances[src_id] = ind_src.cpu().numpy()
-            predictions[dst_id] = dst_pred.cpu().numpy()
-            instances[dst_id] = ind_dst.cpu().numpy()
+            if ind_dst is not None:
+                predictions[dst_id] = dst_pred.cpu().numpy()
+                instances[dst_id] = ind_dst.cpu().numpy()
 
         # get ground truth and update evaluation
-        for i in range(args.batch_size):
-            lidar_token = nusc.get("sample_data", batch["sample"][i]["data"]["LIDAR_TOP"])
-            panoptic_path = nusc.get('panoptic', lidar_token)['filename']
-            panoptic_labels = np.fromfile(f"{args.path_dataset}/{panoptic_path}", dtype=np.uint16)
+        for batch_id in range(args.batch_size):
+            if batch_id not in predictions:
+                continue
+            panoptic_labels = batch["panoptic_labels"][batch_id]
 
-            lidarseq_labels = panoptic_labels // 1000
-            instance_labels = panoptic_labels % 1000
+            lidarseg_labels = mapper(panoptic_labels // 1000) - 1
+            instance_labels = panoptic_labels
 
             evaluator.update(
-                seq,
-                predictions[i],
-                instances[i],
-                lidarseq_labels,
+                batch["scene"][batch_id]["token"],
+                predictions[batch_id],
+                instances[batch_id],
+                lidarseg_labels,
                 instance_labels,
             )
-            seq += 1
 
-        PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
-        print(f"Scene: {batch['scene'][0]['name']}, {batch['scene'][1]['name']}")
-        print(f"PQ4D: {PQ4D}, AQ_ovr: {AQ_ovr}, AQ: {AQ}, AQ_p: {AQ_p}, AQ_r: {AQ_r}")
-        print(f"iou: {iou}, iou_mean: {iou_mean}, iou_p: {iou_p}, iou_r: {iou_r}")
+        if (i+1) % 100 == 0 and True:
+            print("\n==========================")
+            print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
+            PQ4D, AQ_ovr, _, _, _, _, iou_mean, _, _ = evaluator.compute()
+            print(f"PQ4D: {PQ4D},\nAQ_ovr: {AQ_ovr},\niou_mean: {iou_mean}")
 
-        break
+        # break
+
+    print("\n==========================")
+    print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
+    PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
+    print(f"PQ4D: {PQ4D},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
+    print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
+
+    conf_matrix = evaluator.conf_matrix.copy()
+    conf_matrix[:, evaluator.ignore] = 0
+
+    import matplotlib.pyplot as plt
+    plt.imshow(conf_matrix, interpolation="nearest", cmap=plt.cm.viridis)
+    plt.title("Confusion matrix")
+    plt.colorbar()
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.savefig("confusion_matrix.png")
+    plt.close()

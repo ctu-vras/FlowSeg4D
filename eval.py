@@ -1,9 +1,8 @@
 import numpy as np
 
-OFFSET = 2 ** 32
 
 class EvalPQ4D:
-    def __init__(self, num_classes, ignore=None, offset=OFFSET, min_points=30):
+    def __init__(self, num_classes, ignore=None, offset=2**32, min_points=30):
         self.num_classes = num_classes
         ignore = ignore or []
         self.ignore = np.array(ignore, dtype=np.int32)
@@ -35,6 +34,12 @@ class EvalPQ4D:
                 stat_dict[idx] = count
 
     def update(self, seq, pred_sem, pred_inst, gt_sem, gt_inst):
+        mask = gt_sem != -1
+        pred_sem = pred_sem[mask]
+        pred_inst = pred_inst[mask]
+        gt_sem = gt_sem[mask]
+        gt_inst = gt_inst[mask]
+
         self.update_iou(pred_sem, gt_sem)
         self.update_pan(seq, pred_sem, pred_inst, gt_sem, gt_inst)
 
@@ -109,7 +114,7 @@ class EvalPQ4D:
             gt_inst_in_cl = gt_inst_in_cl * mask
 
             unique_pred, counts_pred = np.unique(pred_inst_in_cl[pred_inst_in_cl > 0], return_counts=True)
-            self.update_dict(cl_preds, unique_pred[counts_pred > self.min_points], counts_pred[counts_pred > self.min_points])
+            self.update_dict(cl_preds, unique_pred, counts_pred)
 
             valid_combos = np.logical_and(pred_inst > 0, gt_inst_in_cl > 0)
             offset_combos = pred_inst[valid_combos] + self.offset * gt_inst_in_cl[valid_combos]
@@ -183,7 +188,7 @@ if __name__ == "__main__":
     inst_pred[10:] = 2
 
     # evaluator
-    class_evaluator = EvalPQ4D(3, ignore, OFFSET, 1)
+    class_evaluator = EvalPQ4D(3, ignore, 2**32, 1)
     class_evaluator.update(1, sem_pred, inst_pred, sem_gt, inst_gt)
     PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = class_evaluator.compute()
     np.testing.assert_equal(PQ4D, np.sqrt(1.0/3))

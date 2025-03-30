@@ -45,28 +45,28 @@ class ClassMapper:
 class NuScenesSemSeg(PCDataset):
 
     CLASS_NAME = [
-        "barrier",
-        "bicycle",
-        "bus",
-        "car",
-        "construction_vehicle",
-        "motorcycle",
-        "pedestrian",
-        "traffic_cone",
-        "trailer",
-        "truck",
-        "driveable_surface",
-        "other_flat",
-        "sidewalk",
-        "terrain",
-        "manmade",
-        "vegetation",
+        "barrier",  # 0
+        "bicycle",  # 1
+        "bus",  # 2
+        "car",  # 3
+        "construction_vehicle",  # 4
+        "motorcycle",  # 5
+        "pedestrian",  # 6
+        "traffic_cone",  # 7
+        "trailer",  # 8
+        "truck",  # 9
+        "driveable_surface",  # 10
+        "other_flat",  # 11
+        "sidewalk",  # 12
+        "terrain",  # 13
+        "manmade",  # 14
+        "vegetation",  # 15
     ]
 
     def __init__(self, ratio="100p", **kwargs):
         super().__init__(**kwargs)
 
-        self.nusc = NuScenes(version="v1.0-mini", dataroot=self.rootdir, verbose=False)
+        self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.rootdir, verbose=False)
 
         # For normalizing intensities
         self.mean_int = MEAN_INT
@@ -124,13 +124,13 @@ class NuScenesSemSeg(PCDataset):
 
         return pc, labels, self.list_frames[index][2]
 
-    def get_ego_motion_from_filename(self, filename):
+    def get_ego_motion_from_token(self, token):
         # Find the sample_data entry corresponding to the filename
         try:
             sample_data = next(sd for sd in self.nusc.sample_data
-                               if self.nusc.get_sample_data_path(sd['token']).endswith(filename))
+                               if sd['token'].endswith(token))
         except StopIteration:
-            raise ValueError(f"Filename {filename} not found in the dataset.")
+            raise ValueError(f"Sample with token: {token} not found in the dataset.")
 
         sample = self.nusc.get('sample', sample_data['sample_token'])
         scene = self.nusc.get('scene', sample['scene_token'])
@@ -155,11 +155,26 @@ class NuScenesSemSeg(PCDataset):
 
         trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
 
-        return {'ego_motion': trans_matrix, 'scene': scene, 'sample': sample}
+        return {'ego_motion': trans_matrix, 'scene': scene}
 
     def get_ego_motion(self, index):
-        ego_motion = self.get_ego_motion_from_filename(self.list_frames[index][0])
+        ego_motion = self.get_ego_motion_from_token(self.list_frames[index][2])
         return ego_motion
+
+    def get_panoptic_labels(self, index):
+        token = self.list_frames[index][2]
+        try:
+            sample_data = next(sd for sd in self.nusc.sample_data
+                               if sd['token'].endswith(token))
+        except StopIteration:
+            raise ValueError(f"Sample with token: {token} not found in the dataset.")
+
+        sample = self.nusc.get('sample', sample_data['sample_token'])
+        panoptic_path = self.nusc.get("panoptic", sample["data"]["LIDAR_TOP"])["filename"]
+        panoptic_labels = np.load(f"{self.rootdir}/{panoptic_path}", allow_pickle=True)["data"]
+
+        return panoptic_labels
+
 
 class NuScenesDistill(ImPcDataset):
     def __init__(self, **kwargs):
