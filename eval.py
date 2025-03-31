@@ -34,7 +34,7 @@ class EvalPQ4D:
                 stat_dict[idx] = count
 
     def update(self, seq, pred_sem, pred_inst, gt_sem, gt_inst):
-        mask = gt_sem != -1
+        mask = gt_sem < self.num_classes
         pred_sem = pred_sem[mask]
         pred_inst = pred_inst[mask]
         gt_sem = gt_sem[mask]
@@ -52,6 +52,7 @@ class EvalPQ4D:
     def get_iou_vals(self):
         conf_matrix = self.conf_matrix.copy()
         conf_matrix[:, self.ignore] = 0
+        conf_matrix[self.ignore, :] = 0
 
         tp = conf_matrix.diagonal()
         fp = conf_matrix.sum(axis=1) - tp

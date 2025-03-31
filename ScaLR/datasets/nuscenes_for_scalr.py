@@ -125,11 +125,9 @@ class NuScenesSemSeg(PCDataset):
         return pc, labels, self.list_frames[index][2]
 
     def get_ego_motion_from_token(self, token):
-        # Find the sample_data entry corresponding to the filename
         try:
-            sample_data = next(sd for sd in self.nusc.sample_data
-                               if sd['token'].endswith(token))
-        except StopIteration:
+            sample_data = self.nusc.get('sample_data', token)
+        except KeyError:
             raise ValueError(f"Sample with token: {token} not found in the dataset.")
 
         sample = self.nusc.get('sample', sample_data['sample_token'])
@@ -164,16 +162,18 @@ class NuScenesSemSeg(PCDataset):
     def get_panoptic_labels(self, index):
         token = self.list_frames[index][2]
         try:
-            sample_data = next(sd for sd in self.nusc.sample_data
-                               if sd['token'].endswith(token))
-        except StopIteration:
+            sample_data = self.nusc.get('sample_data', token)
+        except KeyError:
             raise ValueError(f"Sample with token: {token} not found in the dataset.")
 
         sample = self.nusc.get('sample', sample_data['sample_token'])
         panoptic_path = self.nusc.get("panoptic", sample["data"]["LIDAR_TOP"])["filename"]
-        panoptic_labels = np.load(f"{self.rootdir}/{panoptic_path}", allow_pickle=True)["data"]
+        panoptic_labels = np.load(f"{self.rootdir}/{panoptic_path}", allow_pickle=True)["data"].astype(np.int32)
 
-        return panoptic_labels
+        sem_labels = self.mapper(panoptic_labels // 1000) - 1
+        sem_labels[sem_labels == -1] = 255
+
+        return sem_labels, panoptic_labels
 
 
 class NuScenesDistill(ImPcDataset):

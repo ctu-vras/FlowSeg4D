@@ -1,4 +1,3 @@
-import os
 import argparse
 
 import torch
@@ -13,16 +12,6 @@ from pan_seg_utils import transform_pointcloud, get_semantic_clustering, associa
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
-
-class ClassMapper:
-    def __init__(self):
-        current_folder = os.path.dirname(os.path.realpath(__file__))
-        self.mapping = np.load(
-            os.path.join(current_folder, "configs/mapping_class_index_nuscenes.npy")
-        )
-
-    def get_index(self, x):
-        return self.mapping[x] if x < len(self.mapping) else 0
 
 def get_default_parser():
     parser = argparse.ArgumentParser(description="Training")
@@ -170,8 +159,6 @@ if __name__ == "__main__":
     parser = get_default_parser()
     args = parser.parse_args()
 
-    mapper = np.vectorize(ClassMapper().get_index)
-
     # Load config files
     config = load_model_config(args.config_downstream)
     config_pretrain = load_model_config(args.config_pretrain)
@@ -230,7 +217,7 @@ if __name__ == "__main__":
     config_panseg = load_model_config("configs/config.yaml")
     config_panseg["num_classes"] = config["classif"]["nb_class"]
     config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15]
-    config_panseg["ignore_classes"] = [10, 11, 12, 13]
+    config_panseg["ignore_classes"] = None #[10, 11, 12, 13]
 
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
@@ -275,10 +262,11 @@ if __name__ == "__main__":
 
     evaluator = EvalPQ4D(config["classif"]["nb_class"], config_panseg["ignore_classes"])
 
-    for i, batch in enumerate(val_loader):
+    for i, batch in enumerate(trn_loader if not args.eval else val_loader):
         # network inputs
         feat = batch["feat"].to(device)
         labels = batch["labels_orig"].to(device)
+        inst_lab = batch["instance_labels"].to(device)
         batch["upsample"] = [up.to(device) for up in batch["upsample"]]
         cell_ind = batch["cell_ind"].to(device)
         occupied_cell = batch["occupied_cells"].to(device)
@@ -383,38 +371,42 @@ if __name__ == "__main__":
                 instances[dst_id] = ind_dst.cpu().numpy()
 
         # get ground truth and update evaluation
+        start_idx = 0
         for batch_id in range(args.batch_size):
+            end_idx = start_idx + batch["upsample"][batch_id].shape[0]
             if batch_id not in predictions:
+                start_idx = end_idx
                 continue
-            panoptic_labels = batch["panoptic_labels"][batch_id]
 
-            lidarseg_labels = mapper(panoptic_labels // 1000) - 1
-            instance_labels = panoptic_labels
+            lidarseg_labels = labels[start_idx:end_idx].cpu().numpy()
+            instance_labels = inst_lab[start_idx:end_idx].cpu().numpy()
+            start_idx = end_idx
 
             evaluator.update(
                 batch["scene"][batch_id]["token"],
-                predictions[batch_id],
-                instances[batch_id],
-                lidarseg_labels,
-                instance_labels,
+                predictions[batch_id][None],
+                instances[batch_id][None],
+                lidarseg_labels[None],
+                instance_labels[None],
             )
 
         if (i+1) % 100 == 0 and True:
             print("\n==========================")
             print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
-            PQ4D, AQ_ovr, _, _, _, _, iou_mean, _, _ = evaluator.compute()
-            print(f"PQ4D: {PQ4D},\nAQ_ovr: {AQ_ovr},\niou_mean: {iou_mean}")
+            LSTQ, AQ_ovr, _, _, _, _, iou_mean, _, _ = evaluator.compute()
+            print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\niou_mean: {iou_mean}")
 
         # break
 
     print("\n==========================")
     print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
-    PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
-    print(f"PQ4D: {PQ4D},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
+    LSTQ, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
+    print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
     conf_matrix = evaluator.conf_matrix.copy()
     conf_matrix[:, evaluator.ignore] = 0
+    conf_matrix[evaluator.ignore, :] = 0
 
     import matplotlib.pyplot as plt
     plt.imshow(conf_matrix, interpolation="nearest", cmap=plt.cm.viridis)
