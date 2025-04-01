@@ -7,8 +7,8 @@ from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 from utils.eval import EvalPQ4D
+from utils.clustering import Clusterer
 from utils.association import association
-from utils.clustering import get_semantic_clustering
 from utils.misc import load_model_config, transform_pointcloud
 
 torch.set_default_tensor_type(torch.FloatTensor)
@@ -91,6 +91,7 @@ def get_default_parser():
         help="Linear probing",
     )
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
+    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
 
     return parser
 
@@ -105,6 +106,7 @@ def get_datasets(config, args):
         "dim_proj": config["waffleiron"]["dim_proj"],
         "grids_shape": config["waffleiron"]["grids_size"],
         "fov_xyz": config["waffleiron"]["fov_xyz"],
+        "verbose": args.verbose,
     }
 
     # Get datatset
@@ -262,12 +264,13 @@ if __name__ == "__main__":
     model.eval()
 
     evaluator = EvalPQ4D(config["classif"]["nb_class"], config_panseg["ignore_classes"])
+    clusterer = Clusterer(config_panseg)
 
     for i, batch in enumerate(trn_loader if not args.eval else val_loader):
         # network inputs
         feat = batch["feat"].to(device)
-        labels = batch["labels_orig"].to(device)
-        inst_lab = batch["instance_labels"].to(device)
+        labels = batch["labels_orig"]
+        inst_lab = batch["instance_labels"]
         batch["upsample"] = [up.to(device) for up in batch["upsample"]]
         cell_ind = batch["cell_ind"].to(device)
         occupied_cell = batch["occupied_cells"].to(device)
@@ -324,8 +327,8 @@ if __name__ == "__main__":
             src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
             dst_points = torch.cat((dst_points, dst_pred.unsqueeze(1)), axis=1)
 
-            src_labels = get_semantic_clustering(src_points, config_panseg)
-            dst_labels = get_semantic_clustering(dst_points, config_panseg)
+            src_labels = clusterer.get_semantic_clustering(src_points)
+            dst_labels = clusterer.get_semantic_clustering(dst_points)
 
             # scene flow
             # TODO: change for Let-It-Flow
@@ -373,7 +376,7 @@ if __name__ == "__main__":
 
         # get ground truth and update evaluation
         start_idx = 0
-        for batch_id in range(args.batch_size):
+        for batch_id in range(batch_size):
             end_idx = start_idx + batch["upsample"][batch_id].shape[0]
             if batch_id not in predictions:
                 start_idx = end_idx
@@ -391,7 +394,7 @@ if __name__ == "__main__":
                 instance_labels,
             )
 
-        if (i+1) % 100 == 0 and True:
+        if (i+1) % 100 == 0 and args.verbose:
             print("\n==========================")
             print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
             LSTQ, AQ_ovr, _, _, _, _, iou_mean, _, _ = evaluator.compute()

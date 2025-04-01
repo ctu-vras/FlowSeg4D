@@ -66,7 +66,7 @@ class NuScenesSemSeg(PCDataset):
     def __init__(self, ratio="100p", **kwargs):
         super().__init__(**kwargs)
 
-        self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.rootdir, verbose=False)
+        self.nusc = NuScenes(version="v1.0-trainval", dataroot=self.rootdir, verbose=self.verbose)
 
         # For normalizing intensities
         self.mean_int = MEAN_INT

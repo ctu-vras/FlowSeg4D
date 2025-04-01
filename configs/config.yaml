@@ -1,5 +1,5 @@
 # cluster parameters
-clustering_method: dbscan
+clustering_method: alpine
 num_clusters: 100
 min_cluster_size: 25
 epsilon: 2.5
@@ -23,3 +23,8 @@ thres_rot: 0.1
 
 # association parameters
 max_dist: 3.5
+
+# alpine parameters
+bbox_source: web
+neighbours: 32
+margin: 1.3

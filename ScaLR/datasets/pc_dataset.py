@@ -36,6 +36,7 @@ class PCDataset(Dataset):
             (1.0, 1.0, 1.0),
         ),
         num_neighbors=16,
+        verbose=False,
     ):
         super().__init__()
 
@@ -81,6 +82,8 @@ class PCDataset(Dataset):
         if train_augmentations is not None:
             assert self.phase in ["train", "trainval"]
         self.train_augmentations = train_augmentations
+
+        self.verbose = verbose
 
     def get_occupied_2d_cells(self, pc):
         """Return mapping between 3D point and corresponding 2D cell"""
