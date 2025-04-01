@@ -63,7 +63,9 @@ def get_semantic_clustering(points: torch.Tensor, config: dict) -> torch.Tensor:
         if mask.sum() < config["min_cluster_size"]:
             continue
 
-        if config["clustering_method"] == "hdbscan":
+        if config["clustering_method"] == "alpine":
+            class_labels = clustering_alpine(points_np[mask], config)
+        elif config["clustering_method"] == "hdbscan":
             class_labels = clustering_hdbscan(points_np[mask], config)
         else:
             if config["clustering_method"] != "dbscan":
