@@ -3,7 +3,7 @@ import torch
 from ICP_Flow.utils_match import match_pcds
 
 
-def flow_estimation(config, src_points, dst_points, src_labels, dst_labels, pose):
+def flow_estimation_icp(config, src_points, dst_points, src_labels, dst_labels, pose):
     assert len(src_points) == len(src_labels)
 
     pairs, transformations = match_pcds(
@@ -21,3 +21,7 @@ def flow_estimation(config, src_points, dst_points, src_labels, dst_labels, pose
     flow = torch.bmm(T_per_point, src_points_h[:, :, None])[:, 0:3, 0] - src_points
 
     return flow
+
+
+def flow_estimation_ltf(config, src_points, dst_points, src_labels, dst_labels, pose):
+    raise NotImplementedError

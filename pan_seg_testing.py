@@ -6,9 +6,10 @@ import numpy as np
 from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
-from eval import EvalPQ4D
-from pan_seg_utils import load_model_config
-from pan_seg_utils import transform_pointcloud, get_semantic_clustering, association
+from utils.eval import EvalPQ4D
+from utils.association import association
+from utils.clustering import get_semantic_clustering
+from utils.misc import load_model_config, transform_pointcloud
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
