@@ -54,7 +54,9 @@ def association(
             mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
             mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[j])
             if dists[i, j] > config["max_dist"]:  # threshold for association
-                indices_t1[mask_t1] = curr_id if prev_ind is None else prev_ind[mask_t1][0]
+                indices_t1[mask_t1] = (
+                    curr_id if prev_ind is None else prev_ind[mask_t1][0]
+                )
                 curr_id += 1 if prev_ind is None else 0
                 indices_t2[mask_t2] = curr_id
                 curr_id += 1
@@ -87,3 +89,4 @@ def association(
     indices_t1 = indices_t1.to(points_t1.device)
     indices_t2 = indices_t2.to(points_t2.device)
     return indices_t1, indices_t2
+

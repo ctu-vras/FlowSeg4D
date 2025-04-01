@@ -3,6 +3,7 @@ import hdbscan
 import numpy as np
 from sklearn.cluster import DBSCAN
 
+
 def get_semantic_clustering(points: torch.Tensor, config: dict) -> torch.Tensor:
     """
     Perform semantic clustering on input points using DBSCAN.

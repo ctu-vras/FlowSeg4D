@@ -6,7 +6,9 @@ class EvalPQ4D:
         self.num_classes = num_classes
         ignore = ignore or []
         self.ignore = np.array(ignore, dtype=np.int32)
-        self.include = np.array([n for n in range(num_classes) if n not in ignore], dtype=np.int32)
+        self.include = np.array(
+            [n for n in range(num_classes) if n not in ignore], dtype=np.int32
+        )
         self.offset = offset
         self.min_points = min_points
         self.eps = 1e-15
@@ -15,7 +17,9 @@ class EvalPQ4D:
 
     ### MISCELLANEOUS
     def reset(self):
-        self.conf_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int32)
+        self.conf_matrix = np.zeros(
+            (self.num_classes, self.num_classes), dtype=np.int32
+        )
 
         self.sequences = []
         self.preds = {}
@@ -105,19 +109,29 @@ class EvalPQ4D:
             pred_inst_in_cl = pred_inst * (pred_sem == class_id)
             gt_inst_in_cl = gt_inst * (gt_sem == class_id)
 
-            unique_gt, counts_gt = np.unique(gt_inst_in_cl[gt_inst_in_cl > 0], return_counts=True)
-            self.update_dict(cl_gts, unique_gt[counts_gt > self.min_points], counts_gt[counts_gt > self.min_points])
+            unique_gt, counts_gt = np.unique(
+                gt_inst_in_cl[gt_inst_in_cl > 0], return_counts=True
+            )
+            self.update_dict(
+                cl_gts,
+                unique_gt[counts_gt > self.min_points],
+                counts_gt[counts_gt > self.min_points],
+            )
 
             mask = np.zeros_like(gt_inst_in_cl)
             for valid_id in unique_gt[counts_gt > self.min_points]:
                 mask = np.logical_or(mask, gt_inst_in_cl == valid_id)
             gt_inst_in_cl = gt_inst_in_cl * mask
 
-            unique_pred, counts_pred = np.unique(pred_inst_in_cl[pred_inst_in_cl > 0], return_counts=True)
+            unique_pred, counts_pred = np.unique(
+                pred_inst_in_cl[pred_inst_in_cl > 0], return_counts=True
+            )
             self.update_dict(cl_preds, unique_pred, counts_pred)
 
             valid_combos = np.logical_and(pred_inst > 0, gt_inst_in_cl > 0)
-            offset_combos = pred_inst[valid_combos] + self.offset * gt_inst_in_cl[valid_combos]
+            offset_combos = (
+                pred_inst[valid_combos] + self.offset * gt_inst_in_cl[valid_combos]
+            )
             unique_combos, counts_combos = np.unique(offset_combos, return_counts=True)
             self.update_dict(cl_intersects, unique_combos, counts_combos)
 
@@ -178,7 +192,7 @@ if __name__ == "__main__":
     inst_gt[10:] = 1
     inst_gt[15:] = 2
 
-    #we have 3 instance 1 car, 2 truck as gt
+    # we have 3 instance 1 car, 2 truck as gt
     sem_pred = np.zeros(20, dtype=np.int32)
     sem_pred[5:10] = 1
     sem_pred[10:15] = 2
@@ -191,11 +205,14 @@ if __name__ == "__main__":
     # evaluator
     class_evaluator = EvalPQ4D(3, ignore, 2**32, 1)
     class_evaluator.update(1, sem_pred, inst_pred, sem_gt, inst_gt)
-    PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = class_evaluator.compute()
-    np.testing.assert_equal(PQ4D, np.sqrt(1.0/3))
-    np.testing.assert_equal(AQ_ovr, 2.0/3)
+    PQ4D, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = (
+        class_evaluator.compute()
+    )
+    np.testing.assert_equal(PQ4D, np.sqrt(1.0 / 3))
+    np.testing.assert_equal(AQ_ovr, 2.0 / 3)
     np.testing.assert_equal(AQ, [0, 1.0, 0.5])
-    np.testing.assert_equal(AQ_p, 2.0/3)
+    np.testing.assert_equal(AQ_p, 2.0 / 3)
     np.testing.assert_equal(AQ_r, 1.0)
     np.testing.assert_equal(iou, [0, 0.5, 0.5])
     np.testing.assert_equal(iou_mean, 0.5)
+
