@@ -84,7 +84,7 @@ def get_semantic_clustering(points: torch.Tensor, config: dict) -> torch.Tensor:
 
     # keep only the top clusters
     lbls, counts = np.unique(labels, return_counts=True)
-    cluster_info = np.array(list(zip(lbls[1:], counts[1:])))
+    cluster_info = np.array(list(zip(lbls[1:], counts[1:]))).reshape(-1, 2)
     cluster_info = cluster_info[cluster_info[:, 1].argsort()]
 
     clusters_labels = cluster_info[::-1][: config["num_clusters"], 0]

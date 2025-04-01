@@ -68,8 +68,7 @@ class EvalPQ4D:
 
         num_classes = np.count_nonzero(union)
 
-        union = np.maximum(union, self.eps)
-        iou = intersection / union
+        iou = intersection / np.maximum(union, self.eps)
         iou_mean = np.sum(iou) / num_classes
 
         prec = tp / np.maximum(tp + fp, self.eps)
@@ -127,6 +126,7 @@ class EvalPQ4D:
         precs = []
         recalls = []
         num_tubes = [0] * self.num_classes
+        self.pan_aq = np.zeros(self.num_classes, dtype=np.float32)
 
         for seq in self.sequences:
             cl_preds = self.preds[seq]

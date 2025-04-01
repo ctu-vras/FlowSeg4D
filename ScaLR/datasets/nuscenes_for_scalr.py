@@ -173,7 +173,7 @@ class NuScenesSemSeg(PCDataset):
         sem_labels = self.mapper(panoptic_labels // 1000) - 1
         sem_labels[sem_labels == -1] = 255
 
-        return sem_labels, panoptic_labels
+        return sem_labels, panoptic_labels % 1000
 
 
 class NuScenesDistill(ImPcDataset):

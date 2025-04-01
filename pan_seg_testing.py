@@ -3,7 +3,7 @@ import argparse
 import torch
 import numpy as np
 
-from waffleiron import Segmenter
+from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 from eval import EvalPQ4D
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     # --- Setup ICP-Flow
     config_panseg = load_model_config("configs/config.yaml")
     config_panseg["num_classes"] = config["classif"]["nb_class"]
-    config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15]
+    config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     config_panseg["ignore_classes"] = None #[10, 11, 12, 13]
 
     # --- Build nuScenes dataset
@@ -384,10 +384,10 @@ if __name__ == "__main__":
 
             evaluator.update(
                 batch["scene"][batch_id]["token"],
-                predictions[batch_id][None],
-                instances[batch_id][None],
-                lidarseg_labels[None],
-                instance_labels[None],
+                predictions[batch_id],
+                instances[batch_id],
+                lidarseg_labels,
+                instance_labels,
             )
 
         if (i+1) % 100 == 0 and True:
@@ -395,8 +395,6 @@ if __name__ == "__main__":
             print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
             LSTQ, AQ_ovr, _, _, _, _, iou_mean, _, _ = evaluator.compute()
             print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\niou_mean: {iou_mean}")
-
-        # break
 
     print("\n==========================")
     print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
