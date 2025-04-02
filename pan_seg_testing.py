@@ -9,6 +9,7 @@ from ScaLR.datasets import LIST_DATASETS, Collate
 from utils.eval import EvalPQ4D
 from utils.clustering import Clusterer
 from utils.association import association
+from utils.flow import flow_estimation_icp
 from utils.misc import load_model_config, transform_pointcloud
 
 torch.set_default_tensor_type(torch.FloatTensor)
@@ -92,6 +93,7 @@ def get_default_parser():
     )
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
+    parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
 
     return parser
 
@@ -221,6 +223,8 @@ if __name__ == "__main__":
     config_panseg["num_classes"] = config["classif"]["nb_class"]
     config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     config_panseg["ignore_classes"] = None #[10, 11, 12, 13]
+    if args.clustering is not None:
+        config_panseg["clustering_method"] = args.clustering
 
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
@@ -298,30 +302,19 @@ if __name__ == "__main__":
             dst_points = dst_points.to(device)
 
             # ego motion
-            src_points_ego = transform_pointcloud(src_points[:, :3], batch["ego"][src_id].to(device))
-            dst_points_ego = transform_pointcloud(dst_points[:, :3], batch["ego"][dst_id].to(device))
-
-            # ground removal
-            if False:
-                # pypatchworkpp
-                import pypatchworkpp
-
-                params = pypatchworkpp.Parameters()
-                grnd = pypatchworkpp.patchworkpp(params)
-                grnd.estimateGround(points)
-                non_ground = grnd.getNonground()
-                np.save("non_ground_ppp.npy", non_ground)
-
-                # semantic
-                ground_classes = [10, 11, 12, 13]
-                pred = pred.cpu().numpy()
-                mask = np.isin(pred, ground_classes)
-                non_ground = points[~mask][:,:3]
-                np.save("non_ground_sem.npy", non_ground)
+            src_points_ego = transform_pointcloud(src_points, batch["ego"][src_id].to(device))
+            dst_points_ego = transform_pointcloud(dst_points, batch["ego"][dst_id].to(device))
 
             # semantic class
             src_pred = out_upsample[src_id].argmax(dim=1).to(device)
             dst_pred = out_upsample[dst_id].argmax(dim=1).to(device)
+
+            # ground removal
+            ground_classes = torch.tensor([10, 11, 12, 13], device=device)
+            src_mask = torch.isin(src_pred, ground_classes)
+            src_non_ground = src_points[~src_mask]
+            dst_mask = torch.isin(dst_pred, ground_classes)
+            dst_non_ground = dst_points[~dst_mask]
 
             # clustering
             src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
@@ -333,16 +326,9 @@ if __name__ == "__main__":
             # scene flow
             # TODO: change for Let-It-Flow
             if False:
-                src_labels = torch.tensor(clustering(src_points))
-                dst_labels = torch.tensor(clustering(dst_points))
-
-                src_points = src_points.to(device)
-                dst_points = dst_points.to(device)
-                src_labels = src_labels.to(device)
-                dst_labels = dst_labels.to(device)
                 pose = torch.eye(4).to(device)
                 with torch.autocast(device_type=device):
-                    flow = flow_estimation(config_panseg, src_points, dst_points, src_labels, dst_labels, pose)
+                    flow = flow_estimation_icp(config_panseg, src_points, dst_points, src_labels, dst_labels, pose)
 
             # associate -- set temporally consistent instance id
             src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
@@ -405,6 +391,10 @@ if __name__ == "__main__":
     LSTQ, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
+
+    with open(f"results/{config_panseg['clustering_method']}.out", "w") as fh:
+        fh.write(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n")
+        fh.write(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}\n")
 
     conf_matrix = evaluator.conf_matrix.copy()
     conf_matrix[:, evaluator.ignore] = 0

@@ -50,7 +50,7 @@ class Clusterer:
                 min_samples=config["min_cluster_size"]
             )
         else:
-            print(
+            raise ValueError(
                 f"Unsupported clustering method: {self.config['clustering_method']}"
             )
 

@@ -1,5 +1,5 @@
 # cluster parameters
-clustering_method: alpine
+clustering_method: alpine # alpine or dbscan or hdbscan
 num_clusters: 100
 min_cluster_size: 25
 epsilon: 2.5
@@ -25,6 +25,6 @@ thres_rot: 0.1
 max_dist: 3.5
 
 # alpine parameters
-bbox_source: web
+bbox_source: dataset # dataset or web
 neighbours: 32
 margin: 1.3
