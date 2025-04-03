@@ -1,16 +1,11 @@
-# Imports and data
 import torch
-import numpy as np
 from torch_scatter import scatter
-from sklearn.cluster import DBSCAN
 from pytorch3d.ops.knn import knn_points
 
-import sc_utils
+from LetItFlow import sc_utils
 
 
 def pass_id_clusters(c1, c2, nn):
-    # dist, nn, _ = knn_points(p1 + f1, p2, K=1)
-
     for clu_id in range(c1.max() + 1):
         # TODO - DISTANCE threshold?
         matched = c2[nn[0, :, 0][c1 == clu_id]]
@@ -78,7 +73,6 @@ class SC2_KNN_cluster_aware(torch.nn.Module):
 
         sc2_rigidity = sc_utils.spatial_consistency_score(A, leading_eig)
 
-        # if apply_sc2: # for ablation study
         loss = -torch.log(sc2_rigidity).mean()
 
         return loss
@@ -103,33 +97,6 @@ def center_rigidity_loss(pc1, flow, cluster_ids):
     )  # .norm(dim=-1, p=1)
 
     center_displacement = pt_dist_to_center - flow_dist_to_center
-
     rigidity_loss = center_displacement.norm(dim=-1).mean()
 
     return rigidity_loss
-
-
-def initial_clustering(
-    global_list, frame, temporal_range, device, eps=0.3, min_samples=1, z_scale=0.5
-):
-    # init clustering
-    to_cluster_pc1 = np.concatenate(global_list[:temporal_range], axis=0)
-    scaled_cluster_pc1 = to_cluster_pc1[:, :3] * (1, 1, z_scale)  # scale z-axis
-    # Spatio-temporal clustering with fixed temporal range
-    clusters = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(
-        scaled_cluster_pc1[:, :3]
-    )
-
-    p1 = to_cluster_pc1[to_cluster_pc1[:, 3] == frame][None, :, :3]
-    p2 = to_cluster_pc1[to_cluster_pc1[:, 3] == frame + 1][None, :, :3]
-
-    c1 = clusters[to_cluster_pc1[:, 3] == frame]
-    c2 = clusters[to_cluster_pc1[:, 3] == frame + 1]
-
-    f1 = torch.zeros(p1.shape, device=device, requires_grad=True)
-    p1 = torch.tensor(p1, device=device, dtype=torch.float32)
-    p2 = torch.tensor(p2, device=device, dtype=torch.float32)
-    c1 = torch.tensor(c1, device=device)  # clusters are without batch dim
-    c2 = torch.tensor(c2, device=device)
-
-    return p1, p2, c1, c2, f1  # points, ids, flow initialed to 0
