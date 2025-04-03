@@ -12,6 +12,7 @@ def association(
     config: dict,
     prev_ind: Optional[torch.Tensor] = None,
     ind_cache: Optional[torch.Tensor] = None,
+    flow: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32)
     indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32)
@@ -21,6 +22,9 @@ def association(
     for class_id in config["fore_classes"]:
         centers_t1, clusters_t1 = get_centers_for_class(points_t1, class_id)
         centers_t2, clusters_t2 = get_centers_for_class(points_t2, class_id)
+        if flow is not None:
+            flow_t1, _ = ...  # TODO: implement
+            centers_t1 = centers_t1 + flow_t1
 
         class_mask_t1 = points_t1[:, -2] == class_id
         class_mask_t2 = points_t2[:, -2] == class_id
@@ -89,4 +93,3 @@ def association(
     indices_t1 = indices_t1.to(points_t1.device)
     indices_t2 = indices_t2.to(points_t2.device)
     return indices_t1, indices_t2
-

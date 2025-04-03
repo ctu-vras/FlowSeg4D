@@ -94,6 +94,7 @@ def get_default_parser():
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
     parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
+    parser.add_argument("--flow", action="store_true", default=False, help="Use flow estimation")
 
     return parser
 
@@ -329,18 +330,21 @@ if __name__ == "__main__":
             dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
 
             ind_src, ind_dst = None, None
+            flow = None
             if prev_ind is not None:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
-                    flow = flow_estimation_lif(config_panseg, prev_points[:, :3], src_points_ego, prev_points[:, -1], dst_labels, device)
-                    test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache)
+                    if args.flow:
+                        flow = flow_estimation_lif(config_panseg, prev_points[:, :3], src_points_ego, prev_points[:, -1].long(), dst_labels, device)
+                    test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, flow)
                     ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
                     prev_ind = None
                     ind_cache = {"max_id": 0}
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
-                flow = flow_estimation_lif(config_panseg, src_points_ego, dst_points_ego, src_labels, dst_labels, device)
-                ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache)
+                if args.flow:
+                    flow = flow_estimation_lif(config_panseg, src_points_ego, dst_points_ego, src_labels, dst_labels, device)
+                ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
                 ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
             else:
