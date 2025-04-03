@@ -9,7 +9,7 @@ from ScaLR.datasets import LIST_DATASETS, Collate
 from utils.eval import EvalPQ4D
 from utils.clustering import Clusterer
 from utils.association import association
-from utils.flow import flow_estimation_icp
+from utils.flow import flow_estimation_lif
 from utils.misc import load_model_config, transform_pointcloud
 
 torch.set_default_tensor_type(torch.FloatTensor)
@@ -70,7 +70,7 @@ def get_default_parser():
         "--config_downstream",
         type=str,
         required=False,
-        default="ScaLR/configs/downstream/nuscenes/WI_768_finetune_100p.yaml",
+        default="ScaLR/configs/downstream/nuscenes/WI_768_linprob.yaml",
         help="Path to model config downstream",
     )
     parser.add_argument(
@@ -164,9 +164,18 @@ if __name__ == "__main__":
     parser = get_default_parser()
     args = parser.parse_args()
 
+    # --- Setup 
+    config_panseg = load_model_config("configs/config.yaml")
+
     # Load config files
-    config = load_model_config(args.config_downstream)
+    config = load_model_config(config_panseg[args.dataset]["config_downstream"])
     config_pretrain = load_model_config(args.config_pretrain)
+
+    config_panseg["num_classes"] = config["classif"]["nb_class"]
+    config_panseg["fore_classes"] = config_panseg[args.dataset]["fore_classes"]
+    config_panseg["ignore_classes"] = None
+    if args.clustering is not None:
+        config_panseg["clustering"]["clustering_method"] = args.clustering.lower()
 
     # Merge config files
     # Embeddings
@@ -217,14 +226,6 @@ if __name__ == "__main__":
     )
 
     args.workers = 0
-
-    # --- Setup ICP-Flow
-    config_panseg = load_model_config("configs/config.yaml")
-    config_panseg["num_classes"] = config["classif"]["nb_class"]
-    config_panseg["fore_classes"] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    config_panseg["ignore_classes"] = None #[10, 11, 12, 13]
-    if args.clustering is not None:
-        config_panseg["clustering_method"] = args.clustering
 
     # --- Build nuScenes dataset
     train_dataset, val_dataset = get_datasets(config, args)
@@ -323,13 +324,6 @@ if __name__ == "__main__":
             src_labels = clusterer.get_semantic_clustering(src_points)
             dst_labels = clusterer.get_semantic_clustering(dst_points)
 
-            # scene flow
-            # TODO: change for Let-It-Flow
-            if False:
-                pose = torch.eye(4).to(device)
-                with torch.autocast(device_type=device):
-                    flow = flow_estimation_icp(config_panseg, src_points, dst_points, src_labels, dst_labels, pose)
-
             # associate -- set temporally consistent instance id
             src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
             dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
@@ -337,6 +331,7 @@ if __name__ == "__main__":
             ind_src, ind_dst = None, None
             if prev_ind is not None:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
+                    flow = flow_estimation_lif(config_panseg, prev_points[:, :3], src_points_ego, prev_points[:, -1], dst_labels, device)
                     test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache)
                     ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
@@ -344,6 +339,7 @@ if __name__ == "__main__":
                     prev_ind = None
                     ind_cache = {"max_id": 0}
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
+                flow = flow_estimation_lif(config_panseg, src_points_ego, dst_points_ego, src_labels, dst_labels, device)
                 ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache)
                 ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
@@ -392,7 +388,7 @@ if __name__ == "__main__":
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
-    with open(f"results/{config_panseg['clustering_method']}.out", "w") as fh:
+    with open(f"results/{config_panseg['clustering']['clustering_method']}.out", "w") as fh:
         fh.write(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n")
         fh.write(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}\n")
 

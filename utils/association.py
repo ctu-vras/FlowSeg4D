@@ -53,7 +53,7 @@ def association(
         for i, j in zip(row_ind, col_ind):
             mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
             mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[j])
-            if dists[i, j] > config["max_dist"]:  # threshold for association
+            if dists[i, j] > config["association"]["max_dist"]:  # threshold for association
                 indices_t1[mask_t1] = (
                     curr_id if prev_ind is None else prev_ind[mask_t1][0]
                 )

@@ -1,30 +1,38 @@
 # cluster parameters
-clustering_method: alpine # alpine or dbscan or hdbscan
-num_clusters: 100
-min_cluster_size: 25
-epsilon: 2.5
-
-# hist parameters
-speed: 3.333
-translation_frame: 3.333
-chunk_size: 50
-
-# icp parameters
-max_points: 10000
-thres_dist: 0.1
-
-# sanity check
-thres_box: 0.1
-
-# filter unreliable matches
-thres_error: 0.1
-thres_iou: 0.1
-thres_rot: 0.1
-
-# association parameters
-max_dist: 3.5
+clustering:
+  clustering_method: alpine # alpine or dbscan or hdbscan
+  epsilon: 2.5
+  min_cluster_size: 25
+  num_clusters: 100
 
 # alpine parameters
-bbox_source: dataset # dataset or web
-neighbours: 32
-margin: 1.3
+alpine:
+  bbox_source: dataset # dataset or web
+  margin: 1.3
+  neighbours: 32
+
+# let-it-flow parameters
+let_it_flow:
+  K: 16
+  d_thre: 0.03
+  dist_w: 2.
+  eps: 0.3
+  iters: 1500
+  lr: 0.03
+  passing_ids: True
+  min_samples: 1
+  sc_w: 1.
+  temporal_range: 2
+  trunc_dist: 0.5
+
+# association parameters
+association:
+  max_dist: 3.5
+
+nuscenes:
+  fore_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  config_downstream: ScaLR/configs/downstream/nuscenes/WI_768_linprob.yaml
+
+kitti:
+  fore_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+  config_downstream: ScaLR/configs/downstream/semantic_kitti/WI_768_linprob.yaml

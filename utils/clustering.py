@@ -5,7 +5,6 @@ from sklearn.cluster import DBSCAN
 
 from Alpine.alpine import Alpine
 
-THING_CLASSES = [0,1,2,3,4,5,6,7,8,9] # 1,2,3,4,5,6,7,8,9,10,
 BBOX_DATASET = {0: [2.53, 0.50],
                 1: [1.70, 0.60],
                 2: [10.5, 2.94],
@@ -32,22 +31,22 @@ class Clusterer:
     def __init__(self, config):
         self.config = config
         self.clusterer = None
-        if self.config["clustering_method"] == "alpine":
-            BBOX = BBOX_WEB if config["bbox_source"] == "web" else BBOX_DATASET
-            self.clusterer = Alpine(THING_CLASSES, BBOX, k=config["neighbours"], margin=config["margin"])
-        elif self.config["clustering_method"] == "hdbscan":
+        if config["clustering"]["clustering_method"] == "alpine":
+            BBOX = BBOX_WEB if config["alpine"]["bbox_source"] == "web" else BBOX_DATASET
+            self.clusterer = Alpine(config["fore_classes"], BBOX, k=config["alpine"]["neighbours"], margin=config["alpine"]["margin"])
+        elif config["clustering"]["clustering_method"] == "hdbscan":
             self.clusterer = hdbscan.HDBSCAN(
                 algorithm="best",
                 approx_min_span_tree=True,
                 gen_min_span_tree=True,
                 metric="euclidean",
-                min_cluster_size=config["min_cluster_size"],
+                min_cluster_size=config["clustering"]["min_cluster_size"],
                 min_samples=None
                 )
-        elif self.config["clustering_method"] == "dbscan":
+        elif config["clustering"]["clustering_method"] == "dbscan":
             self.clusterer = DBSCAN(
-                eps=config["epsilon"],
-                min_samples=config["min_cluster_size"]
+                eps=config["clustering"]["epsilon"],
+                min_samples=config["clustering"]["min_cluster_size"]
             )
         else:
             raise ValueError(
@@ -67,19 +66,18 @@ class Clusterer:
             torch.Tensor: Cluster labels of shape (N,).
         """
         points_np = points.cpu().numpy()
-        labels = np.full(points.shape[0], -1, dtype=np.int32)
-        if self.config["clustering_method"] == "alpine":
+        labels = np.full(points.shape[0], -1, dtype=np.int64)
+        if self.config["clustering"]["clustering_method"] == "alpine":
             labels = self.clusterer.fit_predict(points_np[:, :3], points_np[:, -1])
         else:
             cluster_id = 0
 
             for class_id in self.config["fore_classes"]:
                 mask = points_np[:, -1] == class_id
-                if mask.sum() < self.config["min_cluster_size"]:
+                if mask.sum() < self.config["clustering"]["min_cluster_size"]:
                     continue
 
-                self.clusterer.fit(points_np[mask, :3])
-                class_labels = self.clusterer.labels_.copy()
+                class_labels = self.clusterer.fit_predict(points_np[mask, :3])
 
                 # merge labels, outliers are labeled as -1
                 updated_labels = class_labels + cluster_id
@@ -96,7 +94,7 @@ class Clusterer:
         cluster_info = np.array(list(zip(lbls[1:], counts[1:]))).reshape(-1, 2)
         cluster_info = cluster_info[cluster_info[:, 1].argsort()]
 
-        clusters_labels = cluster_info[::-1][: self.config["num_clusters"], 0]
+        clusters_labels = cluster_info[::-1][: self.config["clustering"]["num_clusters"], 0]
         labels[np.in1d(labels, clusters_labels, invert=True)] = -1
 
-        return torch.tensor(labels, dtype=torch.int32, device=points.device)
+        return torch.tensor(labels, dtype=torch.int64, device=points.device)
