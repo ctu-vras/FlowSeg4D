@@ -23,7 +23,7 @@ def association(
         centers_t1, clusters_t1 = get_centers_for_class(points_t1, class_id)
         centers_t2, clusters_t2 = get_centers_for_class(points_t2, class_id)
         if flow is not None:
-            flow_t1, _ = ...  # TODO: implement
+            flow_t1, _ = get_centers_for_class(points_t1, class_id, flow)
             centers_t1 = centers_t1 + flow_t1
 
         class_mask_t1 = points_t1[:, -2] == class_id

@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 
 import yaml
 import torch
@@ -43,14 +43,18 @@ def transform_pointcloud(
 def get_centers_for_class(
     points: torch.Tensor,
     class_id: int,
+    flow: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Computes cluster centers for a given class.
+    Computes cluster centers for a given class. If flow is provided, it computes
+    the centers for the flow instead of the original points.
 
     Args:
         points (torch.Tensor): Input tensor of shape (N, D), where last two columns
                                represent class ID and cluster ID.
         class_id (int): The class ID to filter clusters for.
+        flow (Optional[torch.Tensor]): Optional flow tensor of shape (N, D) to compute
+                                       centers for.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]:
@@ -64,11 +68,19 @@ def get_centers_for_class(
     if clusters.numel() == 0:
         return torch.empty(0, 3), clusters
 
-    centers = torch.stack(
-        [
-            points[(class_mask) & (points[:, -1] == cluster_id), :3].mean(dim=0)
-            for cluster_id in clusters
-        ]
-    )
+    if flow is None:
+        centers = torch.stack(
+            [
+                points[(class_mask) & (points[:, -1] == cluster_id), :3].mean(dim=0)
+                for cluster_id in clusters
+            ]
+        )
+    else:
+        centers = torch.stack(
+            [
+                flow[(class_mask) & (points[:, -1] == cluster_id), :3].mean(dim=0)
+                for cluster_id in clusters
+            ]
+        )
 
     return centers, clusters

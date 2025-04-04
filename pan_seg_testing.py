@@ -1,7 +1,6 @@
 import argparse
 
 import torch
-import numpy as np
 
 from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
@@ -331,11 +330,11 @@ if __name__ == "__main__":
 
             ind_src, ind_dst = None, None
             flow = None
-            if prev_ind is not None:
+            if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
                     if args.flow:
                         flow = flow_estimation_lif(config_panseg, prev_points[:, :3], src_points_ego, prev_points[:, -1].long(), dst_labels, device)
-                    test, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, flow)
+                    _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, flow)
                     ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
