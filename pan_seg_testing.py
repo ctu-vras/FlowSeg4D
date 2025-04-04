@@ -94,6 +94,12 @@ def get_default_parser():
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
     parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
     parser.add_argument("--flow", action="store_true", default=False, help="Use flow estimation")
+    parser.add_argument(
+        "--use_gt",
+        action="store_true",
+        default=False,
+        help="Use ground truth labels for semantic segmentation",
+    )
 
     return parser
 
@@ -296,6 +302,7 @@ if __name__ == "__main__":
         predictions = {}
         instances = {}
         batch_size = batch["feat"].shape[0]
+        s_idx = 0
         for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
             src_points = batch["feat"][src_id, :, batch["upsample"][src_id]].T[:, 1:4]
             src_points = src_points.to(device)
@@ -307,8 +314,14 @@ if __name__ == "__main__":
             dst_points_ego = transform_pointcloud(dst_points, batch["ego"][dst_id].to(device))
 
             # semantic class
-            src_pred = out_upsample[src_id].argmax(dim=1).to(device)
-            dst_pred = out_upsample[dst_id].argmax(dim=1).to(device)
+            if not args.use_gt:
+                src_pred = out_upsample[src_id].argmax(dim=1).to(device)
+                dst_pred = out_upsample[dst_id].argmax(dim=1).to(device)
+            else:
+                e_idx = s_idx + batch["upsample"][src_id].shape[0]
+                src_pred = labels[s_idx:e_idx].to(device)
+                dst_pred = labels[e_idx:e_idx + batch["upsample"][dst_id].shape[0]].to(device)
+                s_idx = e_idx
 
             # ground removal
             ground_classes = torch.tensor([10, 11, 12, 13], device=device)

@@ -71,14 +71,14 @@ def get_centers_for_class(
     if flow is None:
         centers = torch.stack(
             [
-                points[(class_mask) & (points[:, -1] == cluster_id), :3].mean(dim=0)
+                points[(class_mask) & (points[:, -1] == cluster_id), :3].median(dim=0).values
                 for cluster_id in clusters
             ]
         )
     else:
         centers = torch.stack(
             [
-                flow[(class_mask) & (points[:, -1] == cluster_id), :3].mean(dim=0)
+                flow[(class_mask) & (points[:, -1] == cluster_id), :3].median(dim=0).values
                 for cluster_id in clusters
             ]
         )
