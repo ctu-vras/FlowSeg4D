@@ -5,34 +5,13 @@ from sklearn.cluster import DBSCAN
 
 from Alpine.alpine import Alpine
 
-BBOX_DATASET = {0: [2.53, 0.50],
-                1: [1.70, 0.60],
-                2: [10.5, 2.94],
-                3: [4.63, 1.97],
-                4: [6.37, 2.85],
-                5: [2.11, 0.77],
-                6: [0.73, 0.67],
-                7: [0.41, 0.41],
-                8: [12.29, 2.90],
-                9: [6.93, 2.51]}
-BBOX_WEB = {0: [2., 0.5], # barrier: inferred
-            1: [1.75, 0.61], # bicycle: https://thebestbikelock.com/wp-content/uploads/2020/01/one-bike-average-size.gif
-            2: [10, 3], # bus: assuming bus, constr_veh, truck and trailer are 3x10m
-            3: [4.75, 1.92], # car: https://www.finn.com/en-DE/campaign/supersized
-            4: [10, 3], # construction_vehicle: assuming bus, constr_veh, truck and trailer are 3x10m
-            5: [2.2, 0.95], # motorcycle: https://carparkjourney.wordpress.com/2013/07/16/what-is-the-average-size-of-a-motorbike/
-            6: [0.93, 0.93], # person: RLSP arm span height: https://pubmed.ncbi.nlm.nih.gov/25063245/  average height in germany https://en.wikipedia.org/wiki/Average_human_height_by_country 175. We get 175*1.06/2
-            7: [0.4, 0.4], # traffic_cone: found on the internet that cones are ~40cm large at the bottom
-            8: [10, 3], # trailer: assuming bus, constr_veh, truck and trailer are 3x10m
-            9: [10, 3]} # truck: assuming bus, constr_veh, truck and trailer are 3x10m
-
 
 class Clusterer:
     def __init__(self, config):
         self.config = config
         self.clusterer = None
         if config["clustering"]["clustering_method"] == "alpine":
-            BBOX = BBOX_WEB if config["alpine"]["bbox_source"] == "web" else BBOX_DATASET
+            BBOX = config["alpine"]["BBOX_WEB"] if config["alpine"]["bbox_source"] == "web" else config["alpine"]["BBOX_DATASET"]
             self.clusterer = Alpine(config["fore_classes"], BBOX, k=config["alpine"]["neighbours"], margin=config["alpine"]["margin"])
         elif config["clustering"]["clustering_method"] == "hdbscan":
             self.clusterer = hdbscan.HDBSCAN(

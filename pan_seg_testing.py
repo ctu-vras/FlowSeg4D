@@ -182,6 +182,9 @@ if __name__ == "__main__":
     config_panseg["ignore_classes"] = None
     if args.clustering is not None:
         config_panseg["clustering"]["clustering_method"] = args.clustering.lower()
+    if config_panseg["clustering"]["clustering_method"] == "alpine":
+        config_panseg["alpine"]["BBOX_WEB"] = config_panseg[args.dataset]["bbox_web"]
+        config_panseg["alpine"]["BBOX_DATASET"] = config_panseg[args.dataset]["bbox_dataset"]
 
     # Merge config files
     # Embeddings

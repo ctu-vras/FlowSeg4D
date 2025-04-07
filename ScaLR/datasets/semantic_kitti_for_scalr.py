@@ -122,6 +122,44 @@ class SemanticKITTISemSeg(PCDataset):
 
         return pc, labels, self.im_idx[index]
 
+    def get_ego_motion(self, index):
+        pose_file = self.im_idx[index].replace("velodyne", "poses.txt")[:-11]
+        poses = np.loadtxt(pose_file).reshape(-1, 3, 4)
+
+        # Get the pose of the current frame
+        pose_t = poses[int(self.im_idx[index][-10:-4])]
+        # Get the pose of the first frame
+        pose_o = poses[0]
+
+        # Add the last row to make it a 4x4 matrix
+        pose_t = np.vstack(
+            (pose_t, np.array([0, 0, 0, 1]))
+        )
+        pose_o = np.vstack(
+            (pose_o, np.array([0, 0, 0, 1]))
+        )
+
+        # Get the ego motion
+        ego_motion = np.linalg.inv(pose_o) @ pose_t
+
+        # Encode scene info
+        scene = {"token": int(self.im_idx[index].split("/")[-3])}
+
+        return ego_motion, scene
+
+    def get_panoptic_labels(self, index):
+        # Extract Label
+        labels_inst = np.fromfile(
+            self.im_idx[index].replace("velodyne", "labels")[:-3] + "label",
+            dtype=np.uint32,
+        ).reshape((-1, 1))
+
+        panoptic_labels = labels_inst & 0xFFFF0000
+        panoptic_labels = panoptic_labels >> 16
+        panoptic_labels = panoptic_labels.astype(np.int32)
+
+        return None, panoptic_labels[:, 0]
+
 
 class SemanticKITTIDistill(ImPcDataset):
     def __init__(self, **kwargs):

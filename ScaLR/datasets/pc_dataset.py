@@ -185,14 +185,12 @@ class PCDataset(Dataset):
             _, upsample = kdtree.query(pc_orig[:, :3], k=1)
 
         try:
-            data = self.get_ego_motion(index)
-            ego_motion = data["ego_motion"]
-            scene = data["scene"]
+            ego_motion, scene = self.get_ego_motion(index)
         except NotImplementedError:
-            ego_motion = None
+            ego_motion, scene = None, None
         except Exception as e:
             print(e)
-            ego_motion = None
+            ego_motion, scene = None, None
 
 
         # Output to return
@@ -278,8 +276,10 @@ class Collate:
         occupied_cells = torch.from_numpy(np.vstack(occupied_cells)).float()  # B x Nmax
         labels_orig = torch.from_numpy(np.hstack(label_orig)).long()
         upsample = [torch.from_numpy(u) for u in upsample]
-        ego_motion = [torch.from_numpy(e).float() for e in ego_motion]
-        panoptic_labels = torch.from_numpy(np.hstack(panoptic_labels)).long()
+        if ego_motion is not None:
+            ego_motion = [torch.from_numpy(e).float() for e in ego_motion]
+        if panoptic_labels is not None:
+            panoptic_labels = torch.from_numpy(np.hstack(panoptic_labels)).long()
 
         # Prepare output variables
         out = {

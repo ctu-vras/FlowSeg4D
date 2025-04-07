@@ -151,9 +151,9 @@ class NuScenesSemSeg(PCDataset):
         car_from_current = transform_matrix(current_cs_rec['translation'], Quaternion(current_cs_rec['rotation']),
                                             inverse=False)
 
-        trans_matrix = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
+        ego_motion = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
 
-        return {'ego_motion': trans_matrix, 'scene': scene}
+        return ego_motion, scene
 
     def get_ego_motion(self, index):
         ego_motion = self.get_ego_motion_from_token(self.list_frames[index][2])
