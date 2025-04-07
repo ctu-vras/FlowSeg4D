@@ -143,9 +143,11 @@ class SemanticKITTISemSeg(PCDataset):
         ego_motion = np.linalg.inv(pose_o) @ pose_t
 
         # Encode scene info
-        scene = {"token": int(self.im_idx[index].split("/")[-3])}
+        scene = {"token": self.im_idx[index].split("/")[-3],
+                 "name": f"scene_{self.im_idx[index].split('/')[-3]}"}
+        sample = {"token": self.im_idx[index].split("/")[-1].split(".")[0]}
 
-        return ego_motion, scene
+        return ego_motion, scene, sample
 
     def get_panoptic_labels(self, index):
         # Extract Label

@@ -185,13 +185,12 @@ class PCDataset(Dataset):
             _, upsample = kdtree.query(pc_orig[:, :3], k=1)
 
         try:
-            ego_motion, scene = self.get_ego_motion(index)
+            ego_motion, scene, sample = self.get_ego_motion(index)
         except NotImplementedError:
-            ego_motion, scene = None, None
+            ego_motion, scene, sample = None, None, None
         except Exception as e:
             print(e)
-            ego_motion, scene = None, None
-
+            ego_motion, scene, sample = None, None, None
 
         # Output to return
         out = (
@@ -211,6 +210,8 @@ class PCDataset(Dataset):
             ego_motion,
             # Scene
             scene,
+            # Sample
+            sample,
             # Panoptic labels
             instance if self.phase in ["train", "trainval"] else pan_instances,
         )
@@ -248,10 +249,9 @@ class Collate:
         assert num_points is None or num_points > 0
 
     def __call__(self, list_data):
-
         # Extract all data
         list_of_data = (list(data) for data in zip(*list_data))
-        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, panoptic_labels = list_of_data
+        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, samples, panoptic_labels = list_of_data
 
         # Zero-pad point clouds
         Nmax = np.max([f.shape[-1] for f in feat])
@@ -292,6 +292,7 @@ class Collate:
             "filename": filename,
             "ego": ego_motion,
             "scene": scene,
+            "sample": samples,
             "instance_labels": panoptic_labels,
         }
 

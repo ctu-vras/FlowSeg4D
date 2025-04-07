@@ -153,11 +153,11 @@ class NuScenesSemSeg(PCDataset):
 
         ego_motion = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
 
-        return ego_motion, scene
+        return ego_motion, scene, sample
 
     def get_ego_motion(self, index):
-        ego_motion = self.get_ego_motion_from_token(self.list_frames[index][2])
-        return ego_motion
+        data = self.get_ego_motion_from_token(self.list_frames[index][2])
+        return data
 
     def get_panoptic_labels(self, index):
         token = self.list_frames[index][2]

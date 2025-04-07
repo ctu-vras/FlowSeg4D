@@ -6,9 +6,9 @@ from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 from utils.eval import EvalPQ4D
+from utils.flow import load_flow
 from utils.clustering import Clusterer
 from utils.association import association
-from utils.flow import flow_estimation_lif
 from utils.misc import load_model_config, transform_pointcloud
 
 torch.set_default_tensor_type(torch.FloatTensor)
@@ -144,7 +144,6 @@ def get_dataloader(train_dataset, val_dataset, args):
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        # shuffle=(train_sampler is None),
         shuffle=False,
         num_workers=args.workers,
         pin_memory=True,
@@ -272,6 +271,7 @@ if __name__ == "__main__":
     ind_cache = {"max_id": 0}
     prev_ind = None
     prev_scene = None
+    prev_sample = None
     prev_points = None
 
     model = model.to(device)
@@ -349,7 +349,7 @@ if __name__ == "__main__":
             if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
                     if args.flow:
-                        flow = flow_estimation_lif(config_panseg, prev_points[:, :3], src_points_ego, prev_points[:, -1].long(), dst_labels, device)
+                        flow = load_flow(args, prev_scene, prev_sample, batch["sample"][src_id]).to(device)
                     _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, flow)
                     ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
@@ -358,7 +358,7 @@ if __name__ == "__main__":
                     ind_cache = {"max_id": 0}
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
                 if args.flow:
-                    flow = flow_estimation_lif(config_panseg, src_points_ego, dst_points_ego, src_labels, dst_labels, device)
+                    flow = load_flow(args, batch["scene"][src_id], batch["sample"][src_id], batch["sample"][dst_id]).to(device)
                 ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
                 ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
@@ -367,6 +367,7 @@ if __name__ == "__main__":
                 ind_cache = {"max_id": 0}
             prev_points = dst_points
             prev_scene = batch["scene"][dst_id]
+            prev_sample = batch["sample"][dst_id]
 
             if ind_src is not None and src_id not in predictions:
                 predictions[src_id] = src_pred.cpu().numpy()

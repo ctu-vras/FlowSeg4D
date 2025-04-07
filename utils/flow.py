@@ -1,4 +1,7 @@
+import os
+
 import torch
+import numpy as np
 from pytorch3d.ops.knn import knn_points
 
 from LetItFlow import let_it_flow
@@ -37,3 +40,11 @@ def flow_estimation_lif(config, src_points, dst_points, src_labels, dst_labels, 
         optimizer.zero_grad()
 
     return f1.detach().squeeze()
+
+
+def load_flow(args, scene, src_info, dst_info):
+    filename = scene["name"] + "_" + str(src_info["token"]) + "_" + str(dst_info["token"]) + ".npz"
+    file_path = os.path.join(args.path_dataset, "flow", filename)
+    flow = np.load(file_path, allow_pickle=True)["flow"]
+
+    return torch.from_numpy(flow).float()
