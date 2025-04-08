@@ -144,7 +144,7 @@ class SemanticKITTISemSeg(PCDataset):
 
         # Encode scene info
         scene = {"token": self.im_idx[index].split("/")[-3],
-                 "name": f"scene_{self.im_idx[index].split('/')[-3]}"}
+                 "name": f"{self.im_idx[index].split('/')[-3]}"}
         sample = {"token": self.im_idx[index].split("/")[-1].split(".")[0]}
 
         return ego_motion, scene, sample

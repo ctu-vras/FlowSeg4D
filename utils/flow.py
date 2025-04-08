@@ -44,7 +44,11 @@ def flow_estimation_lif(config, src_points, dst_points, src_labels, dst_labels, 
 
 def load_flow(args, scene, src_info, dst_info):
     filename = scene["name"] + "_" + str(src_info["token"]) + "_" + str(dst_info["token"]) + ".npz"
-    file_path = os.path.join(args.path_dataset, "flow", filename)
+    if args.dataset == "nuscenes":
+        file_path = os.path.join(args.path_dataset, "flow", filename)
+    elif args.dataset == "semantic_kitti":
+        file_path = os.path.join(args.path_dataset, "dataset/flow", filename)
+
     flow = np.load(file_path, allow_pickle=True)["flow"]
 
     return torch.from_numpy(flow).float()
