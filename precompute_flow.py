@@ -1,5 +1,4 @@
 import os
-import time
 import argparse
 
 import torch
@@ -87,10 +86,10 @@ if __name__ == "__main__":
             if args.restart is not None:
                 if scene < args.restart:
                     continue
-            print(f"Processing scene {scene}")
+            print(f"Processing scene {scene:02d}")
             scene_dir = os.path.join(args.dataroot, f"dataset/sequences/{scene:02d}")
 
-            for i in range(len(os.listdir(scene_dir)) - 1):
+            for i in range(len(os.listdir(os.path.join(scene_dir, "velodyne"))) - 1):
                 # Load source and destination point clouds
                 src_points = np.fromfile(os.path.join(scene_dir, "velodyne", f"{i:06d}.bin"), dtype=np.float32)
                 src_points = torch.from_numpy(src_points.reshape(-1, 4)[:, :3]).to(device)
@@ -101,20 +100,16 @@ if __name__ == "__main__":
                 src_labels = np.fromfile(
                     os.path.join(scene_dir, "labels", f"{i:06d}.label"),
                     dtype=np.uint32,
-                ).reshape((-1, 1))
+                )
                 src_labels = src_labels & 0xFFFF
                 src_labels = torch.from_numpy(src_labels.astype(np.int32)).to(device).long()
                 dst_labels = np.fromfile(
                     os.path.join(scene_dir, "labels", f"{i+1:06d}.label"),
                     dtype=np.uint32,
-                ).reshape((-1, 1))
+                )
                 dst_labels = dst_labels & 0xFFFF
                 dst_labels = torch.from_numpy(dst_labels.astype(np.int32)).to(device).long()
 
-                print(src_points.shape, dst_points.shape)
-                print(src_labels.shape, dst_labels.shape)
-
-                start_t = time.time()
                 flow = flow_estimation_lif(
                     config=config,
                     src_points=src_points,
@@ -123,10 +118,9 @@ if __name__ == "__main__":
                     dst_labels=dst_labels,
                     device=device,
                 )
-                print(f"Flow estimation took {time.time() - start_t:.2f} seconds")
 
                 # Save flow to disk or process it as needed
-                filename = f"{scene:02d}.npz"
+                filename = f"{scene:02d}_{i:06d}_{i+1:06}.npz"
                 np.savez_compressed(
                     os.path.join(args.savedir, "dataset/flow", filename),
                     flow=flow.cpu().numpy(),
