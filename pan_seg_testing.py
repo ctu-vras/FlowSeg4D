@@ -285,6 +285,7 @@ if __name__ == "__main__":
         feat = batch["feat"].to(device)
         labels = batch["labels_orig"]
         inst_lab = batch["instance_labels"]
+        scene_flow = batch["scene_flow"].to(device)
         batch["upsample"] = [up.to(device) for up in batch["upsample"]]
         cell_ind = batch["cell_ind"].to(device)
         occupied_cell = batch["occupied_cells"].to(device)
@@ -311,6 +312,8 @@ if __name__ == "__main__":
             src_points = src_points.to(device)
             dst_points = batch["feat"][dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
             dst_points = dst_points.to(device)
+
+            flow = scene_flow[src_id, :, batch["upsample"][src_id]].T
 
             # ego motion
             src_points_ego = transform_pointcloud(src_points, batch["ego"][src_id].to(device))
@@ -345,20 +348,15 @@ if __name__ == "__main__":
             dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
 
             ind_src, ind_dst = None, None
-            flow = None
             if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
-                    if args.flow:
-                        flow = load_flow(args, prev_scene, prev_sample, batch["sample"][src_id]).to(device)
-                    _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, flow)
+                    _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
                     ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
                     prev_ind = None
                     ind_cache = {"max_id": 0}
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
-                if args.flow:
-                    flow = load_flow(args, batch["scene"][src_id], batch["sample"][src_id], batch["sample"][dst_id]).to(device)
                 ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
                 ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
@@ -368,6 +366,7 @@ if __name__ == "__main__":
             prev_points = dst_points
             prev_scene = batch["scene"][dst_id]
             prev_sample = batch["sample"][dst_id]
+            prev_flow = scene_flow[dst_id, :, batch["upsample"][dst_id]].T
 
             if ind_src is not None and src_id not in predictions:
                 predictions[src_id] = src_pred.cpu().numpy()

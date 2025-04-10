@@ -20,10 +20,10 @@ class Compose:
     def __init__(self, transformations):
         self.transformations = transformations
 
-    def __call__(self, pcloud, labels, instance):
+    def __call__(self, pcloud, labels, instance, flow):
         for t in self.transformations:
-            pcloud, labels, instance = t(pcloud, labels, instance)
-        return pcloud, labels, instance
+            pcloud, labels, instance, flow = t(pcloud, labels, instance, flow)
+        return pcloud, labels, instance, flow
 
 
 class RandomApply:
@@ -31,26 +31,26 @@ class RandomApply:
         self.prob = prob
         self.transformation = transformation
 
-    def __call__(self, pcloud, labels, instance):
+    def __call__(self, pcloud, labels, instance, flow):
         if torch.rand(1) < self.prob:
-            pcloud, labels, instance = self.transformation(pcloud, labels, instance)
-        return pcloud, labels, instance
+            pcloud, labels, instance, flow = self.transformation(pcloud, labels, instance, flow)
+        return pcloud, labels, instance, flow
 
 
 class Transformation:
     def __init__(self, inplace=False):
         self.inplace = inplace
 
-    def __call__(self, pcloud, labels, instance):
+    def __call__(self, pcloud, labels, instance, flow):
         if labels is None:
             return (
-                (pcloud, None, None) if self.inplace else (np.array(pcloud, copy=True), None, None)
+                (pcloud, None, None, None) if self.inplace else (np.array(pcloud, copy=True), None, None, None)
             )
 
         out = (
-            (pcloud, labels, instance)
+            (pcloud, labels, instance, flow)
             if self.inplace
-            else (np.array(pcloud, copy=True), np.array(labels, copy=True), np.array(instance, copy=True))
+            else (np.array(pcloud, copy=True), np.array(labels, copy=True), np.array(instance, copy=True), np.array(flow, copy=True))
         )
         return out
 
@@ -59,8 +59,8 @@ class Identity(Transformation):
     def __init__(self, inplace=False):
         super().__init__(inplace)
 
-    def __call__(self, pcloud, labels, instance):
-        return super().__call__(pcloud, labels, instance)
+    def __call__(self, pcloud, labels, instance, flow):
+        return super().__call__(pcloud, labels, instance, flow)
 
 
 class Rotation(Transformation):
@@ -77,7 +77,7 @@ class Rotation(Transformation):
         elif dim == 6:
             self.dims = (4, 5)
 
-    def __call__(self, pcloud, labels, instance):
+    def __call__(self, pcloud, labels, instance, flow):
         # Build rotation matrix
         theta = (2 * torch.rand(1)[0] - 1) * self.range
         # Build rotation matrix
@@ -88,9 +88,9 @@ class Rotation(Transformation):
             ]
         )
         # Apply rotation
-        pcloud, labels, instance = super().__call__(pcloud, labels, instance)
+        pcloud, labels, instance, flow = super().__call__(pcloud, labels, instance, flow)
         pcloud[:, self.dims] = pcloud[:, self.dims] @ rot
-        return pcloud, labels, instance
+        return pcloud, labels, instance, flow
 
 
 class Scale(Transformation):
@@ -99,22 +99,22 @@ class Scale(Transformation):
         self.dims = dims
         self.range = range
 
-    def __call__(self, pcloud, labels, instance):
-        pcloud, labels, instance = super().__call__(pcloud, labels, instance)
+    def __call__(self, pcloud, labels, instance, flow):
+        pcloud, labels, instance, flow = super().__call__(pcloud, labels, instance, flow)
         scale = 1 + (2 * torch.rand(1).item() - 1) * self.range
         pcloud[:, self.dims] *= scale
-        return pcloud, labels, instance
+        return pcloud, labels, instance, flow
 
 
 class FlipXY(Transformation):
     def __init__(self, inplace=False):
         super().__init__(inplace=inplace)
 
-    def __call__(self, pcloud, labels, instance):
-        pcloud, labels, instance = super().__call__(pcloud, labels, instance)
+    def __call__(self, pcloud, labels, instance, flow):
+        pcloud, labels, instance, flow = super().__call__(pcloud, labels, instance, flow)
         id = torch.randint(2, (1,))[0]
         pcloud[:, id] *= -1.0
-        return pcloud, labels, instance
+        return pcloud, labels, instance, flow
 
 
 class LimitNumPoints(Transformation):
@@ -125,8 +125,8 @@ class LimitNumPoints(Transformation):
         self.random = random
         assert max_point > 0
 
-    def __call__(self, pcloud, labels, instance, return_idx=False):
-        pc, labels, instance = super().__call__(pcloud, labels, instance)
+    def __call__(self, pcloud, labels, instance, flow, return_idx=False):
+        pc, labels, instance, flow = super().__call__(pcloud, labels, instance, flow)
         if pc.shape[0] > self.max_points:
             if self.random:
                 center = torch.randint(pc.shape[0], (1,))[0]
@@ -139,12 +139,13 @@ class LimitNumPoints(Transformation):
             pc = pc[idx]
             labels = None if labels is None else labels[idx]
             instance = None if instance is None else instance[idx]
+            flow = None if flow is None else flow[idx]
         else:
             idx = np.arange(pc.shape[0])
         if return_idx:
-            return pc, labels, instance, idx
+            return pc, labels, instance, flow, idx
         else:
-            return pc, labels, instance
+            return pc, labels, instance, flow
 
 
 class Crop(Transformation):
@@ -159,8 +160,8 @@ class Crop(Transformation):
                 min < max
             ), f"Field of view: min ({min}) < max ({max}) is expected on dimension {i}."
 
-    def __call__(self, pcloud, labels, instance, return_mask=False):
-        pc, labels, instance = super().__call__(pcloud, labels, instance)
+    def __call__(self, pcloud, labels, instance, flow, return_mask=False):
+        pc, labels, instance, flow = super().__call__(pcloud, labels, instance, flow)
 
         where = None
         for i, d in enumerate(self.dims):
@@ -170,9 +171,9 @@ class Crop(Transformation):
             where = temp if where is None else where & temp
 
         if return_mask:
-            return pc[where], None if labels is None else labels[where], None if instance is None else instance[where], where
+            return pc[where], None if labels is None else labels[where], None if instance is None else instance[where], None if flow is None else flow[where], where
         else:
-            return pc[where], None if labels is None else labels[where], None if instance is None else instance[where]
+            return pc[where], None if labels is None else labels[where], None if instance is None else instance[where], None if flow is None else flow[where]
 
 
 class Voxelize(Transformation):
@@ -183,15 +184,16 @@ class Voxelize(Transformation):
         self.random = random
         assert voxel_size >= 0
 
-    def __call__(self, pcloud, labels, instance):
-        pc, labels, instance = super().__call__(pcloud, labels, instance)
+    def __call__(self, pcloud, labels, instance, flow):
+        pc, labels, instance, flow = super().__call__(pcloud, labels, instance, flow)
         if self.voxel_size <= 0:
-            return pc, labels, instance
+            return pc, labels, instance, flow
 
         if self.random:
             permute = torch.randperm(pc.shape[0])
             pc, labels = pc[permute], None if labels is None else labels[permute]
             instance = None if instance is None else instance[permute]
+            flow = None if flow is None else flow[permute]
 
         pc_shift = pc[:, self.dims] - pc[:, self.dims].min(0, keepdims=True)
 
@@ -199,4 +201,4 @@ class Voxelize(Transformation):
             (pc_shift / self.voxel_size).astype("int"), return_index=True, axis=0
         )
 
-        return pc[ind, :], None if labels is None else labels[ind], None if instance is None else instance[ind]
+        return pc[ind, :], None if labels is None else labels[ind], None if instance is None else instance[ind], None if flow is None else flow[ind]

@@ -131,7 +131,7 @@ class PCDataset(Dataset):
         return np.concatenate(pc, 1)
 
     def load_pc(self, index):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def get_ego_motion(self, index):
         raise NotImplementedError
@@ -139,8 +139,11 @@ class PCDataset(Dataset):
     def get_panoptic_labels(self, index):
         raise NotImplementedError
 
+    def get_scene_flow(self, index):
+        raise NotImplementedError
+
     def __len__(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __getitem__(self, index):
         # Load original point cloud
@@ -157,18 +160,29 @@ class PCDataset(Dataset):
         if pan_labels is not None:
             labels_orig = pan_labels
 
+        # Load scene flow if available
+        try:
+            flow = self.get_scene_flow(index)
+        except NotImplementedError:
+            flow = None
+        except Exception as e:
+            print(e)
+            flow = None
+        if flow is None:
+            flow = np.zeros_like(pc_orig[:, :3])
+
         # Prepare input feature
         pc_orig = self.prepare_input_features(pc_orig)
 
         # Voxelization
-        pc, labels, instance = self.downsample(pc_orig, labels_orig, pan_instances)
+        pc, labels, instance, flow = self.downsample(pc_orig, labels_orig, pan_instances, flow)
 
         # Augment data
         if self.train_augmentations is not None:
             pc, labels = self.train_augmentations(pc, labels)
 
         # Crop to fov
-        pc, labels, instance = self.crop_to_fov(pc, labels, instance)
+        pc, labels, instance, flow = self.crop_to_fov(pc, labels, instance, flow)
 
         # For each point, get index of corresponding 2D cells on projected grid
         cell_ind = self.get_occupied_2d_cells(pc)
@@ -214,12 +228,14 @@ class PCDataset(Dataset):
             sample,
             # Panoptic labels
             instance if self.phase in ["train", "trainval"] else pan_instances,
+            # Scene flow
+            flow.T[None],
         )
 
         return out
 
 
-def zero_pad(feat, neighbors_emb, cell_ind, Nmax):
+def zero_pad(feat, neighbors_emb, cell_ind, flow, Nmax):
     N = feat.shape[-1]
     assert N <= Nmax
     occupied_cells = np.ones((1, Nmax))
@@ -240,7 +256,8 @@ def zero_pad(feat, neighbors_emb, cell_ind, Nmax):
         )
         # ... and at the same time mark zero-padded points as unoccupied
         occupied_cells[:, N:] = 0
-    return feat, neighbors_emb, cell_ind, occupied_cells
+        flow = np.concatenate((flow, np.zeros((1, flow.shape[1], Nmax - N))), axis=2)
+    return feat, neighbors_emb, cell_ind, occupied_cells, flow
 
 
 class Collate:
@@ -251,7 +268,7 @@ class Collate:
     def __call__(self, list_data):
         # Extract all data
         list_of_data = (list(data) for data in zip(*list_data))
-        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, samples, panoptic_labels = list_of_data
+        feat, label_orig, cell_ind, neighbors_emb, upsample, filename, ego_motion, scene, samples, panoptic_labels, flow = list_of_data
 
         # Zero-pad point clouds
         Nmax = np.max([f.shape[-1] for f in feat])
@@ -259,10 +276,11 @@ class Collate:
             assert Nmax <= self.num_points
         occupied_cells = []
         for i in range(len(feat)):
-            feat[i], neighbors_emb[i], cell_ind[i], temp = zero_pad(
+            feat[i], neighbors_emb[i], cell_ind[i], temp, flow[i] = zero_pad(
                 feat[i],
                 neighbors_emb[i],
                 cell_ind[i],
+                flow[i],
                 Nmax if self.num_points is None else self.num_points,
             )
             occupied_cells.append(temp)
@@ -280,6 +298,8 @@ class Collate:
             ego_motion = [torch.from_numpy(e).float() for e in ego_motion]
         if panoptic_labels is not None:
             panoptic_labels = torch.from_numpy(np.hstack(panoptic_labels)).long()
+        if flow is not None:
+            flow = torch.from_numpy(np.vstack(flow)).float()
 
         # Prepare output variables
         out = {
@@ -294,6 +314,7 @@ class Collate:
             "scene": scene,
             "sample": samples,
             "instance_labels": panoptic_labels,
+            "scene_flow": flow,
         }
 
         return out

@@ -175,6 +175,26 @@ class NuScenesSemSeg(PCDataset):
 
         return sem_labels, panoptic_labels % 1000
 
+    def get_scene_flow(self, index):
+        token = self.list_frames[index][2]
+        try:
+            sample_data = self.nusc.get('sample_data', token)
+        except KeyError:
+            raise ValueError(f"Sample with token: {token} not found in the dataset.")
+
+        sample = self.nusc.get('sample', sample_data['sample_token'])
+        scene = self.nusc.get('scene', sample['scene_token'])
+
+        if sample["next"] == "":
+            flow = None
+        else:
+            filename = scene["name"] + "_" + str(sample["token"]) + "_" + str(sample["next"]) + ".npz"
+            flow = np.load(
+                os.path.join(self.rootdir, "flow", filename), allow_pickle=True
+            )["flow"]
+
+        return flow
+
 
 class NuScenesDistill(ImPcDataset):
     def __init__(self, **kwargs):
