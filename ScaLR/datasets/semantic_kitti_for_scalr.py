@@ -149,6 +149,19 @@ class SemanticKITTISemSeg(PCDataset):
 
         return ego_motion, scene, sample
 
+    def get_scene_flow(self, index):
+        path = self.im_idx[index][:-33]
+        sequence = self.im_idx[index][-22:-20]
+        frame = self.im_idx[index][-10:-4]
+
+        filename = f"{sequence}_{frame}_{int(frame)+1:06d}.npz"
+        try:
+            scene_flow = np.load(os.path.join(path, "flow", filename))["flow"]
+        except FileNotFoundError:
+            scene_flow = None
+
+        return scene_flow
+
     def get_panoptic_labels(self, index):
         # Extract Label
         labels_inst = np.fromfile(
