@@ -6,9 +6,6 @@ ml PyTorch3D/0.7.1-foss-2022a-CUDA-11.7.0
 python3 -m venv unsup3D
 source unsup3D/bin/activate
 
-##### Clone repositories
-git clone https://github.com/valeoai/Alpine.git
-
 ##### Install dependencies
 pip install torch_scatter
 pip install open3d typing_extensions requests pyarrow
