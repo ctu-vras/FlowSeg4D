@@ -42,7 +42,7 @@ def get_default_parser():
         "--seed", default=None, type=int, help="Seed for initializing training"
     )
     parser.add_argument(
-        "--gpu", default=None, type=int, help="Set to any number to use gpu 0"
+        "--gpu", default=None, type=int, help="Set to a number of gpu to use"
     )
     parser.add_argument(
         "--multiprocessing-distributed",
@@ -266,7 +266,13 @@ if __name__ == "__main__":
 
     model.load_state_dict(new_ckpt)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cpu"
+    if torch.cuda.is_available():
+        if args.gpu is not None:
+            device = f"cuda:{args.gpu}"
+        else:
+            device = "cuda"
+    device = torch.device(device)
 
     ind_cache = {"max_id": 0}
     prev_ind = None
@@ -293,14 +299,13 @@ if __name__ == "__main__":
         net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
 
         # get semantic class prediction
-        with torch.autocast(device_type=device):
-            with torch.no_grad():
-                out, tokens = model(*net_inputs)
-            # upsample to original resolution
-            out_upsample = []
-            for id_b, closest_point in enumerate(batch["upsample"]):
-                temp = out[id_b, :, closest_point]
-                out_upsample.append(temp.T)
+        with torch.no_grad():
+            out, tokens = model(*net_inputs)
+        # upsample to original resolution
+        out_upsample = []
+        for id_b, closest_point in enumerate(batch["upsample"]):
+            temp = out[id_b, :, closest_point]
+            out_upsample.append(temp.T)
 
         # get instance prediction
         predictions = {}
@@ -308,9 +313,9 @@ if __name__ == "__main__":
         batch_size = batch["feat"].shape[0]
         s_idx = 0
         for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
-            src_points = batch["feat"][src_id, :, batch["upsample"][src_id]].T[:, 1:4]
+            src_points = feat[src_id, :, batch["upsample"][src_id]].T[:, 1:4]
             src_points = src_points.to(device)
-            dst_points = batch["feat"][dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
+            dst_points = feat[dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
             dst_points = dst_points.to(device)
 
             flow = scene_flow[src_id, :, batch["upsample"][src_id]].T

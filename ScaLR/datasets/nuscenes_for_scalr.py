@@ -189,9 +189,12 @@ class NuScenesSemSeg(PCDataset):
             flow = None
         else:
             filename = scene["name"] + "_" + str(sample["token"]) + "_" + str(sample["next"]) + ".npz"
-            flow = np.load(
-                os.path.join(self.rootdir, "flow", filename), allow_pickle=True
-            )["flow"]
+            try:
+                flow = np.load(
+                    os.path.join(self.rootdir, "flow", filename), allow_pickle=True
+                )["flow"]
+            except FileNotFoundError:
+                flow = None
 
         return flow
 
