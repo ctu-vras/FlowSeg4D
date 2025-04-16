@@ -348,10 +348,11 @@ if __name__ == "__main__":
             src_labels = clusterer.get_semantic_clustering(src_points)
             dst_labels = clusterer.get_semantic_clustering(dst_points)
 
-            # associate -- set temporally consistent instance id
+            # create data - ego compensated xyz + semantic class + cluster id
             src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
             dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
 
+            # associate -- set temporally consistent instance id
             ind_src, ind_dst = None, None
             if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
