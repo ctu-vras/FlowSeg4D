@@ -6,10 +6,9 @@ from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
 
 from utils.eval import EvalPQ4D
-from utils.flow import load_flow
 from utils.clustering import Clusterer
-from utils.association import association
-from utils.misc import load_model_config, transform_pointcloud
+from utils.association import association, long_association
+from utils.misc import Obj_cache, load_model_config, transform_pointcloud
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
@@ -274,7 +273,7 @@ if __name__ == "__main__":
             device = "cuda"
     device = torch.device(device)
 
-    ind_cache = {"max_id": 0}
+    ind_cache = Obj_cache(config["classif"]["nb_class"])
     prev_ind = None
     prev_scene = None
     prev_sample = None
@@ -315,11 +314,16 @@ if __name__ == "__main__":
         for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
             src_points = feat[src_id, :, batch["upsample"][src_id]].T[:, 1:4]
             src_points = src_points.to(device)
+            src_features = tokens[src_id, :, batch["upsample"][src_id]].T
             dst_points = feat[dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
             dst_points = dst_points.to(device)
+            dst_features = tokens[dst_id, :, batch["upsample"][dst_id]].T
 
-            flow = scene_flow[src_id, :, batch["upsample"][src_id]].T
-
+            if args.flow:
+                flow = scene_flow[src_id, :, batch["upsample"][src_id]].T
+            else:
+                flow = None
+            
             # ego motion
             src_points_ego = transform_pointcloud(src_points, batch["ego"][src_id].to(device))
             dst_points_ego = transform_pointcloud(dst_points, batch["ego"][dst_id].to(device))
@@ -348,31 +352,34 @@ if __name__ == "__main__":
             src_labels = clusterer.get_semantic_clustering(src_points)
             dst_labels = clusterer.get_semantic_clustering(dst_points)
 
-            # create data - ego compensated xyz + semantic class + cluster id
-            src_points = torch.cat((src_points_ego, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
-            dst_points = torch.cat((dst_points_ego, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
+            # create data - ego compensated xyz + features + semantic class + cluster id
+            src_points = torch.cat((src_points_ego, src_features, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
+            dst_points = torch.cat((dst_points_ego, dst_features, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
 
             # associate -- set temporally consistent instance id
             ind_src, ind_dst = None, None
             if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
-                    _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
-                    ind_cache["max_id"] = int(max(prev_ind.max(), ind_src.max()))
+                    _, ind_src = long_association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
+                    ind_cache.max_id = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
                     prev_ind = None
-                    ind_cache = {"max_id": 0}
+                    ind_cache.reset()
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
-                ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
-                ind_cache["max_id"] = int(max(ind_src.max(), ind_dst.max()))
+                ind_src, ind_dst = long_association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
+                ind_cache.max_id = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
             else:
                 prev_ind = None
-                ind_cache = {"max_id": 0}
+                ind_cache.reset()
             prev_points = dst_points
             prev_scene = batch["scene"][dst_id]
             prev_sample = batch["sample"][dst_id]
-            prev_flow = scene_flow[dst_id, :, batch["upsample"][dst_id]].T
+            if args.flow:
+                prev_flow = scene_flow[dst_id, :, batch["upsample"][dst_id]].T
+            else:
+                prev_flow = None
 
             if ind_src is not None and src_id not in predictions:
                 predictions[src_id] = src_pred.cpu().numpy()
@@ -421,11 +428,11 @@ if __name__ == "__main__":
     conf_matrix[:, evaluator.ignore] = 0
     conf_matrix[evaluator.ignore, :] = 0
 
-    import matplotlib.pyplot as plt
-    plt.imshow(conf_matrix, interpolation="nearest", cmap=plt.cm.viridis)
-    plt.title("Confusion matrix")
-    plt.colorbar()
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.savefig("confusion_matrix.png")
-    plt.close()
+    # import matplotlib.pyplot as plt
+    # plt.imshow(conf_matrix, interpolation="nearest", cmap=plt.cm.viridis)
+    # plt.title("Confusion matrix")
+    # plt.colorbar()
+    # plt.xlabel("Predicted")
+    # plt.ylabel("True")
+    # plt.savefig("confusion_matrix.png")
+    # plt.close()
