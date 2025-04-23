@@ -45,6 +45,10 @@ def association(
             flow_t1, _ = get_centers_for_class(points_t1, class_id, flow)
             centers_t1 = centers_t1 + flow_t1
 
+        if config["association"]["use_feat"]:
+            features_t1, _ = get_centers_for_class(points_t1, class_id, points_t1[:, 3:-2])
+            features_t2, _ = get_centers_for_class(points_t2, class_id, points_t2[:, 3:-2])
+
         # If no clusters are found, continue to the next class
         if clusters_t1.numel() == 0 and clusters_t2.numel() == 0:
             continue
@@ -71,14 +75,27 @@ def association(
                     indices_t1[mask] = prev_ind[mask][0]
             continue
 
-        dists = torch.cdist(centers_t1, centers_t2)
+        # Calculate the association cost
+        cost_dists = torch.cdist(centers_t1, centers_t2)
+        cost_dists[cost_dists > config["association"]["max_dist"]] = 1e8
+
+        if config["association"]["use_feat"]:
+            features_t1_n = features_t1 / (torch.norm(features_t1, dim=1, keepdim=True) + 1e-6)
+            features_t2_n = features_t2 / (torch.norm(features_t2, dim=1, keepdim=True) + 1e-6)
+            cost_features = 1 - torch.matmul(features_t1_n, features_t2_n.T)  # cosine similarity
+            cost_features[cost_features > config["association"]["max_feat"]] = 1e8
+        else:
+            cost_features = torch.zeros_like(cost_dists)
+
+        assoc_cost = cost_dists + cost_features
+
         # associate using hungarian matching
-        row_ind, col_ind = linear_sum_assignment(dists.cpu().numpy())
+        row_ind, col_ind = linear_sum_assignment(assoc_cost.cpu().numpy())
         used_row, used_col = set(row_ind), set(col_ind)
         for i, j in zip(row_ind, col_ind):
             mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
             mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[j])
-            if dists[i, j] > config["association"]["max_dist"]:  # threshold for association
+            if assoc_cost[i, j] > 1e8:  # threshold for association
                 indices_t1[mask_t1] = (
                     curr_id if prev_ind is None else prev_ind[mask_t1][0]
                 )
@@ -181,6 +198,7 @@ def long_association(
                 indices_t2[mask] = curr_id
                 instance = Instance_data(
                     id=curr_id,
+                    cl_id=cluster_id,
                     life=config["association"]["life"],
                     center=centers_t2[i],
                     feature=features_t2[i],
@@ -192,9 +210,10 @@ def long_association(
         prev_insts = obj_cache.prev_instances[class_id]
         centers_t1_o = centers_t1.clone()
         if len(prev_insts) == 0:
-            for i in range(len(clusters_t1)):
+            for i, cluster_id in enumerate(clusters_t1):
                 new_inst = Instance_data(
                     id=curr_id,
+                    cl_id=cluster_id,
                     life=config["association"]["life"] - 1,
                     center=centers_t1[i],
                     feature=features_t1[i],
@@ -214,36 +233,15 @@ def long_association(
         if clusters_t2.numel() == 0:
             dists = torch.cdist(centers_t1_o, centers_t1, p=2)
             flow_dist = torch.norm(flow_t1, dim=1)
-            for i in range(len(clusters_t1)):
+            for i in range(len(centers_t1_o)):
                 min_dist = torch.argmin(dists[i])
                 if dists[i, min_dist] < (flow_dist[i] + 1e-4) and \
                    prev_insts[prev_insts_keys[min_dist]].life == config["association"]["life"] - 1:
                     prev_inst = prev_insts[prev_insts_keys[min_dist]]
-                    mask = (class_mask_t1) & (points_t1[:, -1] == prev_inst.id)
+                    mask = (class_mask_t1) & (points_t1[:, -1] == prev_inst.cl_id)
                     indices_t1[mask] = prev_inst.id
                 else:
-                    # Diagnostic prints
-                    print(f"Index i: {i}")
-                    print(f"min_dist index: {min_dist}")
-                    print(f"Distance from dists[i, min_dist]: {dists[i, min_dist].item()}")
-                    print(f"dist[i]: {dists[i]}")
-                    print(f"centers_t1_o[i]: {centers_t1_o[i]}")
-                    print(f"centers_t1[min_dist]: {centers_t1[min_dist]}")
-                    # Compute single-pair distance
-                    cdist_result = torch.cdist(centers_t1_o[i].unsqueeze(0), centers_t1[min_dist].unsqueeze(0), p=2)
-                    print(f"cdist result: {cdist_result.item()}")
-                    # Manual Euclidean distance for verification
-                    manual_dist = torch.sqrt(torch.sum((centers_t1_o[i] - centers_t1[min_dist]) ** 2))
-                    print(f"Manual Euclidean distance: {manual_dist.item()}")
-                    # Check shapes and dtypes
-                    print(f"Shape of centers_t1_o: {centers_t1_o.shape}")
-                    print(f"Shape of centers_t1: {centers_t1.shape}")
-                    print(f"Shape of dists: {dists.shape}")
-                    print(f"Dtype of centers_t1_o: {centers_t1_o.dtype}")
-                    print(f"Dtype of centers_t1: {centers_t1.dtype}")
-                    # Check if tensors require gradients
-                    print(f"centers_t1_o requires_grad: {centers_t1_o.requires_grad}")
-                    print(f"centers_t1 requires_grad: {centers_t1.requires_grad}")
+                    print("Cluster in t1 not found")
                     exit()
             continue
 
@@ -265,23 +263,27 @@ def long_association(
 
         for row, col in zip(row_ind, col_ind):
             prev_inst = prev_insts[prev_insts_keys[row]]
-            mask_t1 = (class_mask_t1) & (points_t1[:, -1] == prev_inst.id)
+            mask_t1 = (class_mask_t1) & (points_t1[:, -1] == prev_inst.cl_id)
             mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[col])
             if assoc_cost[row, col] < 1e8:
-                indices_t1[mask_t1] = prev_inst.id
-                indices_t1[mask_t1] = prev_inst.id
+                if prev_inst.life == config["association"]["life"] - 1:
+                    indices_t1[mask_t1] = prev_inst.id
+                indices_t2[mask_t2] = prev_inst.id
                 new_inst = Instance_data(
                     id=prev_inst.id,
+                    cl_id=clusters_t2[col],
                     life=config["association"]["life"],
                     center=centers_t2[col],
                     feature=(features_t2[col] + features_t1[row]) / 2,
                 )
                 add_instances.append(new_inst)
             else:
-                indices_t1[mask_t1] = prev_inst.id
+                if prev_inst.life == config["association"]["life"] - 1:
+                    indices_t1[mask_t1] = prev_inst.id
                 indices_t2[mask_t2] = curr_id
                 new_inst = Instance_data(
                     id=curr_id,
+                    cl_id=clusters_t2[col],
                     life=config["association"]["life"],
                     center=centers_t2[col],
                     feature=features_t2[col],
@@ -295,7 +297,9 @@ def long_association(
                 if i in used_row:
                     continue
                 instance = prev_insts[prev_insts_keys[i]]
-                mask = (class_mask_t1) & (points_t1[:, -1] == instance.id)
+                if not instance.life == config["association"]["life"] - 1:
+                    continue
+                mask = (class_mask_t1) & (points_t1[:, -1] == instance.cl_id)
                 indices_t1[mask] = instance.id
         elif centers_t1.shape[0] < centers_t2.shape[0]:
             for j, cluster_id in enumerate(clusters_t2):
@@ -305,6 +309,7 @@ def long_association(
                 indices_t2[mask] = curr_id
                 new_inst = Instance_data(
                     id=curr_id,
+                    cl_id=cluster_id,
                     life=config["association"]["life"],
                     center=centers_t2[j],
                     feature=features_t2[j],

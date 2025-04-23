@@ -1,6 +1,7 @@
 function main() {
     local dir="$1"
-    echo "Unzipping files in directory: $dir\n"
+    echo "Unzipping files in directory: $dir"
+    echo ""
 
     if [[ ! -d "$dir" ]]; then
         echo "Error: '$zip_file' is not a directory."

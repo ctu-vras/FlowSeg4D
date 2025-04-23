@@ -34,6 +34,9 @@ def parse_args():
     parser.add_argument(
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
     )
+    parser.add_argument(
+        "--frame", default=0, type=int, help="Frame number to start from, only valid for semantic kitti"
+    )
 
     return parser.parse_args()
 
@@ -146,6 +149,9 @@ if __name__ == "__main__":
             pose_o = torch.linalg.inv(poses_h[0])
 
             for i in range(len(os.listdir(os.path.join(scene_dir, "velodyne"))) - 1):
+                if args.frame > 0 and i < args.frame:
+                    continue
+
                 # Load source and destination point clouds
                 src_points = np.fromfile(os.path.join(scene_dir, "velodyne", f"{i:06d}.bin"), dtype=np.float32)
                 src_points = torch.from_numpy(src_points.reshape(-1, 4)[:, :3]).to(device).double()

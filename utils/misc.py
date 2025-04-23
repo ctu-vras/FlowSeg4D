@@ -120,6 +120,7 @@ class Obj_cache:
 @dataclass
 class Instance_data:
     id: int
+    cl_id: int
     life: int
     center: torch.Tensor
     # bbox : torch.Tensor
