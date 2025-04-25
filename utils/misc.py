@@ -12,6 +12,16 @@ def load_model_config(file):
         config = yaml.safe_load(f)
     return config
 
+def print_config(config):
+    print("\nConfiguration:")
+    print("=" * 20)
+    for key, value in config.items():
+        if isinstance(value, dict):
+            print(f"{key}:")
+            for sub_key, sub_value in value.items():
+                print(f"  {sub_key}: {sub_value}")
+        else:
+            print(f"{key}: {value}")
 
 def transform_pointcloud(
     points: torch.Tensor, transform_matrix: Union[torch.Tensor, np.ndarray]
@@ -79,12 +89,20 @@ def get_centers_for_class(
             ]
         )
     else:
-        centers = torch.stack(
-            [
-                feat[(class_mask) & (points[:, -1] == cluster_id)].median(dim=0).values
-                for cluster_id in clusters
-            ]
-        )
+        if feat.shape[1] == 3:
+            centers = torch.stack(
+                [
+                    feat[(class_mask) & (points[:, -1] == cluster_id)].median(dim=0).values
+                    for cluster_id in clusters
+                ]
+            )
+        else:
+            centers = torch.stack(
+                [
+                    feat[(class_mask) & (points[:, -1] == cluster_id)].mean(dim=0)
+                    for cluster_id in clusters
+                ]
+            )
 
     return centers.double(), clusters
 

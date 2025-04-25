@@ -35,6 +35,9 @@ def association(
 
     curr_id = 1 if ind_cache is None else ind_cache.max_id + 1
 
+    # if flow is not None:
+    #     points_t1[:, :3] += flow[:, :3]
+
     for class_id in config["fore_classes"]:
         # Get the centers of clusters for the current class
         centers_t1, clusters_t1 = get_centers_for_class(points_t1, class_id)
@@ -231,17 +234,25 @@ def long_association(
 
         # If no clusters are found in t2, assign ids to t1
         if clusters_t2.numel() == 0:
-            dists = torch.cdist(centers_t1_o, centers_t1, p=2)
+            life_mask = torch.zeros(len(prev_insts_keys), dtype=torch.bool)
+            for i in range(len(prev_insts_keys)):
+                if prev_insts[prev_insts_keys[i]].life == config["association"]["life"] - 1:
+                    life_mask[i] = True
+            dists = torch.cdist(centers_t1_o, centers_t1[life_mask], p=2)
             flow_dist = torch.norm(flow_t1, dim=1)
             for i in range(len(centers_t1_o)):
                 min_dist = torch.argmin(dists[i])
-                if dists[i, min_dist] < (flow_dist[i] + 1e-4) and \
-                   prev_insts[prev_insts_keys[min_dist]].life == config["association"]["life"] - 1:
+                if dists[i, min_dist] < (flow_dist[i] + 1e-4):
                     prev_inst = prev_insts[prev_insts_keys[min_dist]]
                     mask = (class_mask_t1) & (points_t1[:, -1] == prev_inst.cl_id)
                     indices_t1[mask] = prev_inst.id
                 else:
                     print("Cluster in t1 not found")
+                    print(dists[i, min_dist])
+                    print(centers_t1_o[i])
+                    print(centers_t1[min_dist])
+                    print(flow_t1[i])
+                    print(torch.norm(flow_t1[i]))
                     exit()
             continue
 

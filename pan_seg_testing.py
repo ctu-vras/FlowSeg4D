@@ -8,7 +8,7 @@ from ScaLR.datasets import LIST_DATASETS, Collate
 from utils.eval import EvalPQ4D
 from utils.clustering import Clusterer
 from utils.association import association, long_association
-from utils.misc import Obj_cache, load_model_config, transform_pointcloud
+from utils.misc import Obj_cache, load_model_config, transform_pointcloud, print_config
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
@@ -99,6 +99,7 @@ def get_default_parser():
         default=False,
         help="Use ground truth labels for semantic segmentation",
     )
+    parser.add_argument("--short", action="store_true", default=False, help="Do not use long association")
 
     return parser
 
@@ -183,6 +184,12 @@ if __name__ == "__main__":
     if config_panseg["clustering"]["clustering_method"] == "alpine":
         config_panseg["alpine"]["BBOX_WEB"] = config_panseg[args.dataset]["bbox_web"]
         config_panseg["alpine"]["BBOX_DATASET"] = config_panseg[args.dataset]["bbox_dataset"]
+    if args.short:
+        config_panseg["association"]["use_long"] = False
+    else:
+        config_panseg["association"]["use_long"] = True
+
+    print_config(config_panseg)
 
     # Merge config files
     # Embeddings
@@ -360,14 +367,20 @@ if __name__ == "__main__":
             ind_src, ind_dst = None, None
             if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
-                    _, ind_src = long_association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
+                    if config_panseg["association"]["use_long"]:
+                        _, ind_src = long_association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
+                    else:
+                        _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
                     ind_cache.max_id = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
                     prev_ind = None
                     ind_cache.reset()
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
-                ind_src, ind_dst = long_association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
+                if config_panseg["association"]["use_long"]:
+                    ind_src, ind_dst = long_association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
+                else:
+                    ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
                 ind_cache.max_id = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
             else:
@@ -427,12 +440,3 @@ if __name__ == "__main__":
     conf_matrix = evaluator.conf_matrix.copy()
     conf_matrix[:, evaluator.ignore] = 0
     conf_matrix[evaluator.ignore, :] = 0
-
-    # import matplotlib.pyplot as plt
-    # plt.imshow(conf_matrix, interpolation="nearest", cmap=plt.cm.viridis)
-    # plt.title("Confusion matrix")
-    # plt.colorbar()
-    # plt.xlabel("Predicted")
-    # plt.ylabel("True")
-    # plt.savefig("confusion_matrix.png")
-    # plt.close()
