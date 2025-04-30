@@ -32,6 +32,9 @@ from .pandaset_for_scalr import (
     PandaSet64Distill,
     PandaSetGTDistill,
 )
+from .pone import (
+    PoneSemSeg,
+)
 
 
 LIST_DATASETS = {
@@ -42,6 +45,7 @@ LIST_DATASETS = {
     "semantic_kitti_1p": SemanticKITTISemSeg_1p,
     "panda64": Pandaset64SemSeg,
     "pandagt": PandasetGTSemSeg,
+    "pone": PoneSemSeg,
 }
 
 LIST_DATASETS_DISTILL = {
