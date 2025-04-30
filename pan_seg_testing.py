@@ -28,34 +28,7 @@ def get_default_parser():
         default="/mnt/data/vras/data/nuScenes-panoptic/",
     )
     parser.add_argument(
-        "--log_path",
-        type=str,
-        required=False,
-        default="demo_log",
-        help="Path to log folder",
-    )
-    parser.add_argument(
-        "--restart", action="store_true", default=False, help="Restart training"
-    )
-    parser.add_argument(
-        "--seed", default=None, type=int, help="Seed for initializing training"
-    )
-    parser.add_argument(
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
-    )
-    parser.add_argument(
-        "--multiprocessing-distributed",
-        action="store_true",
-        help="Use multi-processing distributed training to launch "
-        "N processes per node, which has N GPUs. This is the "
-        "fastest way to use PyTorch for either single node or "
-        "multi node data parallel training",
-    )
-    parser.add_argument(
-        "--fp16",
-        action="store_true",
-        default=False,
-        help="Enable autocast for mix precision training",
     )
     parser.add_argument(
         "--config_pretrain",
@@ -82,12 +55,6 @@ def get_default_parser():
         type=str,
         default="ScaLR/logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/nuscenes/ckpt_last.pth",
         help="Path to pretrained ckpt",
-    )
-    parser.add_argument(
-        "--linprob",
-        action="store_true",
-        default=False,
-        help="Linear probing",
     )
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
@@ -189,7 +156,7 @@ if __name__ == "__main__":
     else:
         config_panseg["association"]["use_long"] = True
 
-    print_config(config_panseg)
+    print_config(args, config_panseg)
 
     # Merge config files
     # Embeddings

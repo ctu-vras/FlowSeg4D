@@ -12,16 +12,51 @@ def load_model_config(file):
         config = yaml.safe_load(f)
     return config
 
-def print_config(config):
+def print_config(args, config):
+    msg = ""
+    msg += f"Dataset: {args.dataset}\n"
+    msg += f"  path: {args.path_dataset}\n"
+    msg += f"  split: {'eval' if args.eval else 'train'}\n"
+    msg += f"  foreground classes: {config[f'{args.dataset}']['fore_classes']}\n"
+
+    msg += f"Batch size: {args.batch_size}\n"
+
+    msg += f"GPU: {torch.cuda.is_available()}\n"
+    if args.gpu:
+        msg += f"  GPU ID: {args.gpu}\n"
+
+    msg += f"Use flow: {args.flow}\n"
+    msg += f"Use gt: {args.use_gt}\n"
+
+    clustering_method = config["clustering"]["clustering_method"] if args.clustering is None else args.clustering
+    msg += f"Clustering: {clustering_method}\n"
+    msg += f"  max number of clusters: {config['clustering']['num_clusters']}\n"
+    if clustering_method == "dbscan":
+        msg += f"  eps: {config['clustering']['eps']}\n"
+        msg += f"  min_samples: {config['clustering']['min_samples']}\n"
+    elif clustering_method == "alpine":
+        msg += f"  margin: {config['alpine']['margin']}\n"
+        msg += f"  neighbours: {config['alpine']['neighbours']}\n"
+        source = config["alpine"]["bbox_source"]
+        msg += f"  bbox source: {source}\n"
+        msg += f"  bbox: {config[f'{args.dataset}'][f'bbox_{source}']}\n"
+
+    msg += f"Association:\n"
+    msg += f"  max distance: {config['association']['max_dist']}\n"
+    if not args.short or (args.short and config['association']['use_feat']):
+        msg += f"  max feature distance: {config['association']['max_feat']}\n"
+    if not args.short:
+        msg += f"  life: {config['association']['life']}\n"
+
+    msg += f"Checkpoint: {args.pretrained_ckpt}\n"
+
+    msg += f"Debug: {args.verbose}\n"
+
     print("\nConfiguration:")
     print("=" * 20)
-    for key, value in config.items():
-        if isinstance(value, dict):
-            print(f"{key}:")
-            for sub_key, sub_value in value.items():
-                print(f"  {sub_key}: {sub_value}")
-        else:
-            print(f"{key}: {value}")
+    print(msg)
+    return msg
+
 
 def transform_pointcloud(
     points: torch.Tensor, transform_matrix: Union[torch.Tensor, np.ndarray]
