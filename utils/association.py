@@ -35,18 +35,13 @@ def association(
 
     curr_id = 1 if ind_cache is None else ind_cache.max_id + 1
 
-    # if flow is not None:
-    #     points_t1[:, :3] += flow[:, :3]
+    if flow is not None:
+        points_t1[:, :3] += flow[:, :3]
 
     for class_id in config["fore_classes"]:
         # Get the centers of clusters for the current class
         centers_t1, clusters_t1 = get_centers_for_class(points_t1, class_id)
         centers_t2, clusters_t2 = get_centers_for_class(points_t2, class_id)
-
-        # If flow is provided, adjust the centers of t1
-        if flow is not None:
-            flow_t1, _ = get_centers_for_class(points_t1, class_id, flow)
-            centers_t1 = centers_t1 + flow_t1
 
         if config["association"]["use_feat"]:
             features_t1, _ = get_centers_for_class(points_t1, class_id, points_t1[:, 3:-2])
