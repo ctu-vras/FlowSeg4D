@@ -294,11 +294,11 @@ class Collate:
         occupied_cells = torch.from_numpy(np.vstack(occupied_cells)).float()  # B x Nmax
         labels_orig = torch.from_numpy(np.hstack(label_orig)).long()
         upsample = [torch.from_numpy(u) for u in upsample]
-        if ego_motion is not None:
+        if ego_motion[0] is not None:
             ego_motion = [torch.from_numpy(e).float() for e in ego_motion]
-        if panoptic_labels is not None:
+        if panoptic_labels[0] is not None:
             panoptic_labels = torch.from_numpy(np.hstack(panoptic_labels)).long()
-        if flow is not None:
+        if flow[0] is not None:
             flow = torch.from_numpy(np.vstack(flow)).float()
 
         # Prepare output variables

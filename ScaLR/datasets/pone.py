@@ -70,8 +70,6 @@ class PoneSemSeg(PCDataset):
         # Load segmentation labels
         labels = np.zeros(pc.shape[0], dtype=np.int32)
 
-        print(pc.shape)
-
         # Label 0 should be ignored
         labels = labels - 1
         labels[labels == -1] = 255
