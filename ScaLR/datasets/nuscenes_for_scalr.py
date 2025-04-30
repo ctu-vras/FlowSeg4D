@@ -99,6 +99,8 @@ class NuScenesSemSeg(PCDataset):
             self.list_frames = np.load(
                 os.path.join(current_folder, "list_files_nuscenes.npz")
             )[self.phase]
+        else:
+            raise ValueError(f"Unprepared nuScenes split {self.phase}.")
 
     def __len__(self):
         return len(self.list_frames)

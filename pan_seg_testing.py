@@ -8,13 +8,19 @@ from ScaLR.datasets import LIST_DATASETS, Collate
 from utils.eval import EvalPQ4D
 from utils.clustering import Clusterer
 from utils.association import association, long_association
-from utils.misc import Obj_cache, load_model_config, transform_pointcloud, print_config
+from utils.misc import (
+    Obj_cache,
+    load_model_config,
+    transform_pointcloud,
+    print_config,
+    save_data,
+)
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
 
-def get_default_parser():
-    parser = argparse.ArgumentParser(description="Training")
+def parse_args():
+    parser = argparse.ArgumentParser(description="4D Panoptic Segmentation")
     parser.add_argument(
         "--dataset",
         type=str,
@@ -26,9 +32,6 @@ def get_default_parser():
         type=str,
         help="Path to dataset",
         default="/mnt/data/vras/data/nuScenes-panoptic/",
-    )
-    parser.add_argument(
-        "--gpu", default=None, type=int, help="Set to a number of gpu to use"
     )
     parser.add_argument(
         "--config_pretrain",
@@ -45,33 +48,44 @@ def get_default_parser():
         help="Path to model config downstream",
     )
     parser.add_argument(
-        "--eval",
-        action="store_true",
-        default=False,
-        help="Run validation only",
-    )
-    parser.add_argument(
         "--pretrained_ckpt",
         type=str,
         default="ScaLR/logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/nuscenes/ckpt_last.pth",
         help="Path to pretrained ckpt",
     )
-    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
-    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
-    parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
-    parser.add_argument("--flow", action="store_true", default=False, help="Use flow estimation")
     parser.add_argument(
         "--use_gt",
         action="store_true",
         default=False,
         help="Use ground truth labels for semantic segmentation",
     )
+    parser.add_argument(
+        "--eval", action="store_true", default=False, help="Run validation split of dataset",
+    )
+    parser.add_argument(
+        "--test", action="store_true", default=False, help="Run testing split of dataset",
+    )
+    parser.add_argument(
+        "--gpu", default=None, type=int, help="Set to a number of gpu to use"
+    )
+    parser.add_argument(
+        "--save_path", type=str, default=None, help="Path to save segmentation files"
+    )
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
+    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
+    parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
+    parser.add_argument("--flow", action="store_true", default=False, help="Use flow estimation")
     parser.add_argument("--short", action="store_true", default=False, help="Do not use long association")
 
-    return parser
+    return parser.parse_args()
 
 
 def get_datasets(config, args):
+    # Get datatset
+    DATASET = LIST_DATASETS.get(args.dataset.lower())
+    if DATASET is None:
+        raise ValueError(f"Dataset {args.dataset.lower()} not available.")
+
     # Shared parameters
     kwargs = {
         "rootdir": args.path_dataset,
@@ -84,62 +98,42 @@ def get_datasets(config, args):
         "verbose": args.verbose,
     }
 
-    # Get datatset
-    DATASET = LIST_DATASETS.get(args.dataset.lower())
-    if DATASET is None:
-        raise ValueError(f"Dataset {args.dataset.lower()} not available.")
+    # Get phase
+    if args.eval:
+        phase = "val"
+    elif args.test:
+        phase = "test"
+    else:
+        phase = "train"
 
-    # Train dataset
-    train_dataset = DATASET(
-        phase="train",
+    dataset = DATASET(
+        phase=phase,
         **kwargs,
     )
 
-    # Validation dataset
-    val_dataset = DATASET(
-        phase="val",
-        **kwargs,
-    )
-
-    return train_dataset, val_dataset
+    return dataset
 
 
-def get_dataloader(train_dataset, val_dataset, args):
-    train_sampler = None
-    val_sampler = None
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
+def get_dataloader(dataset, args):
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
         pin_memory=True,
-        sampler=train_sampler,
-        drop_last=True,
-        collate_fn=Collate(),
-    )
-    val_loader = torch.utils.data.DataLoader(
-        val_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.workers,
-        pin_memory=True,
-        sampler=val_sampler,
-        drop_last=False,
+        sampler=None,
+        drop_last=not args.eval and not args.test,
         collate_fn=Collate(),
     )
 
-    return train_loader, val_loader, train_sampler
+    return dataloader
 
 
 if __name__ == "__main__":
-    parser = get_default_parser()
-    args = parser.parse_args()
-
-    # --- Setup 
-    config_panseg = load_model_config("configs/config.yaml")
+    args = parse_args()
 
     # Load config files
+    config_panseg = load_model_config("configs/config.yaml")
     config = load_model_config(config_panseg[args.dataset]["config_downstream"])
     config_pretrain = load_model_config(args.config_pretrain)
 
@@ -156,7 +150,7 @@ if __name__ == "__main__":
     else:
         config_panseg["association"]["use_long"] = True
 
-    print_config(args, config_panseg)
+    config_msg = print_config(args, config_panseg)
 
     # Merge config files
     # Embeddings
@@ -195,7 +189,7 @@ if __name__ == "__main__":
     else:
         config["waffleiron"]["fov_xyz"] = config_pretrain["point_backbone"]["fov"]
 
-    # --- Build network
+    # Build network
     model = Segmenter(
         input_channels=config["embedding"]["size_input"],
         feat_channels=config["waffleiron"]["nb_channels"],
@@ -208,9 +202,9 @@ if __name__ == "__main__":
 
     args.workers = 0
 
-    # --- Build nuScenes dataset
-    train_dataset, val_dataset = get_datasets(config, args)
-    trn_loader, val_loader, _ = get_dataloader(train_dataset, val_dataset, args)
+    # Load dataset
+    dataset = get_datasets(config, args)
+    dataloader = get_dataloader(dataset, args)
 
     # Load pretrained model
     ckpt = torch.load(args.pretrained_ckpt, map_location="cpu")
@@ -237,8 +231,10 @@ if __name__ == "__main__":
         classif,
     )
 
+    # Load pretrained weights
     model.load_state_dict(new_ckpt)
 
+    # Set device
     device = "cpu"
     if torch.cuda.is_available():
         if args.gpu is not None:
@@ -247,19 +243,22 @@ if __name__ == "__main__":
             device = "cuda"
     device = torch.device(device)
 
+    # Initialize cache
     ind_cache = Obj_cache(config["classif"]["nb_class"])
     prev_ind = None
     prev_scene = None
     prev_sample = None
     prev_points = None
 
+    # Set model to evaluation mode
     model = model.to(device)
     model.eval()
 
+    # Initialize
     evaluator = EvalPQ4D(config["classif"]["nb_class"], config_panseg["ignore_classes"])
     clusterer = Clusterer(config_panseg)
 
-    for i, batch in enumerate(trn_loader if not args.eval else val_loader):
+    for i, batch in enumerate(dataloader):
         # network inputs
         feat = batch["feat"].to(device)
         labels = batch["labels_orig"]
@@ -311,13 +310,6 @@ if __name__ == "__main__":
                 src_pred = labels[s_idx:e_idx].to(device)
                 dst_pred = labels[e_idx:e_idx + batch["upsample"][dst_id].shape[0]].to(device)
                 s_idx = e_idx
-
-            # ground removal
-            ground_classes = torch.tensor([10, 11, 12, 13], device=device)
-            src_mask = torch.isin(src_pred, ground_classes)
-            src_non_ground = src_points[~src_mask]
-            dst_mask = torch.isin(dst_pred, ground_classes)
-            dst_non_ground = dst_points[~dst_mask]
 
             # clustering
             src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
@@ -372,6 +364,7 @@ if __name__ == "__main__":
         start_idx = 0
         for batch_id in range(batch_size):
             end_idx = start_idx + batch["upsample"][batch_id].shape[0]
+            print(list(predictions.keys()))
             if batch_id not in predictions:
                 start_idx = end_idx
                 continue
@@ -388,6 +381,16 @@ if __name__ == "__main__":
                 instance_labels,
             )
 
+            # save segmentation files
+            if args.save_path is not None:
+                save_data(
+                    args.save_path,
+                    batch["scene"][batch_id]["name"],
+                    batch["filename"][batch_id],
+                    predictions[batch_id],
+                    instances[batch_id],
+                )
+
         if (i+1) % 100 == 0 and args.verbose:
             print("\n==========================")
             print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
@@ -401,9 +404,6 @@ if __name__ == "__main__":
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
     with open(f"results/{config_panseg['clustering']['clustering_method']}.out", "w") as fh:
+        fh.write(f"Config:\n{config_msg}\n\n")
         fh.write(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n")
         fh.write(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}\n")
-
-    conf_matrix = evaluator.conf_matrix.copy()
-    conf_matrix[:, evaluator.ignore] = 0
-    conf_matrix[evaluator.ignore, :] = 0

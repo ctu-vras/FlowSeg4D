@@ -1,3 +1,4 @@
+import os
 import copy
 from dataclasses import dataclass
 from typing import Union, Tuple, Optional
@@ -16,8 +17,11 @@ def print_config(args, config):
     msg = ""
     msg += f"Dataset: {args.dataset}\n"
     msg += f"  path: {args.path_dataset}\n"
-    msg += f"  split: {'eval' if args.eval else 'train'}\n"
+    msg += f"  split: {'eval' if args.eval else 'test' if args.test else 'train'}\n"
     msg += f"  foreground classes: {config[f'{args.dataset}']['fore_classes']}\n"
+
+    if args.save_path is not None:
+        msg += f"Save path: {args.save_path}\n"
 
     msg += f"Batch size: {args.batch_size}\n"
 
@@ -31,9 +35,11 @@ def print_config(args, config):
     clustering_method = config["clustering"]["clustering_method"] if args.clustering is None else args.clustering
     msg += f"Clustering: {clustering_method}\n"
     msg += f"  max number of clusters: {config['clustering']['num_clusters']}\n"
-    if clustering_method == "dbscan":
-        msg += f"  eps: {config['clustering']['eps']}\n"
-        msg += f"  min_samples: {config['clustering']['min_samples']}\n"
+    if clustering_method == "hdbscan":
+        msg += f"  min_samples: {config['clustering']['min_cluster_size']}\n"
+    elif clustering_method == "dbscan":
+        msg += f"  epsilon: {config['clustering']['epsilon']}\n"
+        msg += f"  min_samples: {config['clustering']['min_cluster_size']}\n"
     elif clustering_method == "alpine":
         msg += f"  margin: {config['alpine']['margin']}\n"
         msg += f"  neighbours: {config['alpine']['neighbours']}\n"
@@ -50,12 +56,33 @@ def print_config(args, config):
 
     msg += f"Checkpoint: {args.pretrained_ckpt}\n"
 
-    msg += f"Debug: {args.verbose}\n"
+    msg += f"Verbose: {args.verbose}\n"
 
     print("\nConfiguration:")
     print("=" * 20)
     print(msg)
     return msg
+
+
+def save_data(save_path, scene_name, filename, semantic, instance):
+    """
+    Save the data to a file.
+    Args:
+        save_path (str): The path to save the data.
+        scene_name (str): The name of the scene.
+        filename (str): The path to the original file.
+        semantic (torch.Tensor): The semantic labels.
+        instance (torch.Tensor): The instance labels.
+    """
+    save_dir = os.path.join(save_path, scene_name, "predictions")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    filename = filename.split("/")[-1].split(".")[0] + ".label"
+    save_file = os.path.join(save_dir, filename)
+    save_data = (instance.astype(np.uint32) << 16) | semantic.astype(np.uint32)
+
+    save_data.tofile(save_file)
 
 
 def transform_pointcloud(
