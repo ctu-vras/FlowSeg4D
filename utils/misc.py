@@ -47,8 +47,6 @@ def save_data(
 
     save_data.tofile(save_file)
 
-    exit()
-
 ###############################
 # Config functions
 ###############################
@@ -101,6 +99,56 @@ def print_config(args: argparse.Namespace, config: dict) -> str:
         msg += f"  max feature distance: {config['association']['max_feat']}\n"
     if not args.short:
         msg += f"  life: {config['association']['life']}\n"
+
+    msg += f"Checkpoint: {args.pretrained_ckpt}\n"
+
+    msg += f"Verbose: {args.verbose}\n"
+
+    print("\nConfiguration:")
+    print("=" * 20)
+    print(msg)
+    return msg
+
+def print_config_cont(args: argparse.Namespace, config: dict) -> str:
+    """
+    Print the configuration settings for the continuous run of panoptic
+    segmentation algorithm.
+    Args:
+        args (argparse.Namespace): The arguments passed to the script.
+        config (dict): The configuration settings.
+    Returns:
+        str: The formatted configuration string.
+    """
+    msg = ""
+
+    clustering_method = config["clustering"]["clustering_method"] if args.clustering is None else args.clustering
+    msg += f"Clustering: {clustering_method}\n"
+    msg += f"  max number of clusters: {config['clustering']['num_clusters']}\n"
+    if clustering_method == "hdbscan":
+        msg += f"  min_samples: {config['clustering']['min_cluster_size']}\n"
+    elif clustering_method == "dbscan":
+        msg += f"  epsilon: {config['clustering']['epsilon']}\n"
+        msg += f"  min_samples: {config['clustering']['min_cluster_size']}\n"
+    elif clustering_method == "alpine":
+        msg += f"  margin: {config['alpine']['margin']}\n"
+        msg += f"  neighbours: {config['alpine']['neighbours']}\n"
+        source = config["alpine"]["bbox_source"]
+        msg += f"  bbox source: {source}\n"
+        msg += f"  bbox: {config[f'{args.dataset}'][f'bbox_{source}']}\n"
+
+    msg += f"Association:\n"
+    msg += f"  max distance: {config['association']['max_dist']}\n"
+    if not args.short or (args.short and config['association']['use_feat']):
+        msg += f"  max feature distance: {config['association']['max_feat']}\n"
+    if not args.short:
+        msg += f"  life: {config['association']['life']}\n"
+
+    if args.save_path is not None:
+        msg += f"Save path: {args.save_path}\n"
+
+    msg += f"GPU: {torch.cuda.is_available()}\n"
+    if args.gpu:
+        msg += f"  GPU ID: {args.gpu}\n"
 
     msg += f"Checkpoint: {args.pretrained_ckpt}\n"
 

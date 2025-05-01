@@ -82,9 +82,10 @@ class PoneSemSeg(PCDataset):
             allow_pickle=True
         )['odom']
 
-        scene_name = self.list_frames[index][0].split("/")[-1]
+        scene_name = self.list_frames[index][0].split("/")[-1][:-9]
+        scene = {"name": scene_name, "token": scene_name}
 
-        return data['transformation'], scene_name, self.list_frames[index][1]
+        return data['transformation'], scene, self.list_frames[index][1]
 
     def get_panoptic_labels(self, index):
         return None, None
