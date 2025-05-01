@@ -1,3 +1,4 @@
+import time
 import argparse
 
 import torch
@@ -17,8 +18,6 @@ from utils.misc import (
     load_model_config,
     transform_pointcloud,
 )
-
-torch.set_default_tensor_type(torch.FloatTensor)
 
 
 def parse_args():
@@ -85,6 +84,10 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     args.workers = 0
+    if args.batch_size < 1:
+        raise ValueError("Batch size must be greater than 0")
+    elif args.batch_size == 1:
+        raise ValueError("Batch size of 1 is not supported, for batch size of 1 use pan_seg_continuous.py")
 
     # Load config files
     config_panseg = load_model_config("configs/config.yaml")
@@ -168,35 +171,39 @@ if __name__ == "__main__":
     for i, batch in enumerate(dataloader):
         # network inputs
         feat = batch["feat"].to(device)
-        labels = batch["labels_orig"]
-        inst_lab = batch["instance_labels"]
-        scene_flow = batch["scene_flow"].to(device)
-        batch["upsample"] = [up.to(device) for up in batch["upsample"]]
         cell_ind = batch["cell_ind"].to(device)
         occupied_cell = batch["occupied_cells"].to(device)
         neighbors_emb = batch["neighbors_emb"].to(device)
         net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
 
+        # other variables
+        labels = batch["labels_orig"]
+        inst_lab = batch["instance_labels"]
+        scene_flow = batch["scene_flow"].to(device)
+
         # get semantic class prediction
         with torch.no_grad():
             out, tokens = model(*net_inputs)
+
         # upsample to original resolution
         out_upsample = []
+        batch["upsample"] = [up.to(device) for up in batch["upsample"]]
         for id_b, closest_point in enumerate(batch["upsample"]):
             temp = out[id_b, :, closest_point]
             out_upsample.append(temp.T)
 
         # get instance prediction
-        predictions = {}
-        instances = {}
-        batch_size = batch["feat"].shape[0]
         s_idx = 0
+        instances = {}
+        predictions = {}
+        batch_size = batch["feat"].shape[0]
         for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
             src_points = feat[src_id, :, batch["upsample"][src_id]].T[:, 1:4]
             src_points = src_points.to(device)
-            src_features = tokens[src_id, :, batch["upsample"][src_id]].T
             dst_points = feat[dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
             dst_points = dst_points.to(device)
+
+            src_features = tokens[src_id, :, batch["upsample"][src_id]].T
             dst_features = tokens[dst_id, :, batch["upsample"][dst_id]].T
 
             if args.flow:
@@ -204,11 +211,11 @@ if __name__ == "__main__":
             else:
                 flow = None
             
-            # ego motion
+            # ego motion compensation
             src_points_ego = transform_pointcloud(src_points, batch["ego"][src_id].to(device))
             dst_points_ego = transform_pointcloud(dst_points, batch["ego"][dst_id].to(device))
 
-            # semantic class
+            # get semantic class
             if not args.use_gt:
                 src_pred = out_upsample[src_id].argmax(dim=1).to(device)
                 dst_pred = out_upsample[dst_id].argmax(dim=1).to(device)
@@ -311,7 +318,7 @@ if __name__ == "__main__":
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
-    with open(f"results/{config_panseg['clustering']['clustering_method']}.out", "w") as fh:
+    with open(time.strftime('results/Log_%Y-%m-%d_%H-%M-%S', time.gmtime()), "w") as fh:
         fh.write(f"Config:\n{config_msg}\n\n")
         fh.write(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n")
         fh.write(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}\n")

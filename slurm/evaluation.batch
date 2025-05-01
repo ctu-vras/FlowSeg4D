@@ -13,4 +13,4 @@
 #SBATCH --mail-type=ALL                             # what to send, valid type values are NONE, BEGIN, END, FAIL, REQUEUE, ALL
 
 source env.sh
-python3 pan_seg_testing.py --eval --verbose
+python3 pan_seg_main.py --eval --verbose
