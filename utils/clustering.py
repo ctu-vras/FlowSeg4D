@@ -46,15 +46,16 @@ class Clusterer:
         """
         points_np = points.cpu().numpy()
         labels = np.full(points.shape[0], -1, dtype=np.int64)
-        if self.config["clustering"]["clustering_method"] == "alpine":
-            labels = self.clusterer.fit_predict(points_np[:, :3], points_np[:, -1])
-        else:
-            cluster_id = 0
 
-            for class_id in self.config["fore_classes"]:
+        if self.config["clustering"]["clustering_method"] == "alpine":
+            labels = self.clusterer.fit_predict(points_np[:, :3], points_np[:, -1]) - 1
+        else:
+            class_ids, class_counts = np.unique(points_np[:, -1], return_counts=True)
+            valid_classes = class_ids[class_counts >= self.config["clustering"]["min_cluster_size"]]
+
+            cluster_id = 0
+            for class_id in valid_classes:
                 mask = points_np[:, -1] == class_id
-                if mask.sum() < self.config["clustering"]["min_cluster_size"]:
-                    continue
 
                 class_labels = self.clusterer.fit_predict(points_np[mask, :3])
 
@@ -70,10 +71,11 @@ class Clusterer:
 
         # keep only the top clusters
         lbls, counts = np.unique(labels, return_counts=True)
-        cluster_info = np.array(list(zip(lbls[1:], counts[1:]))).reshape(-1, 2)
-        cluster_info = cluster_info[cluster_info[:, 1].argsort()]
+        valid_mask = lbls != -1
+        cluster_info = np.vstack((lbls[valid_mask], counts[valid_mask])).T
+        cluster_info = cluster_info[cluster_info[:, 1].argsort()[::-1]]
 
-        clusters_labels = cluster_info[::-1][: self.config["clustering"]["num_clusters"], 0]
-        labels[np.in1d(labels, clusters_labels, invert=True)] = -1
+        clusters_labels = cluster_info[: self.config["clustering"]["num_clusters"], 0]
+        labels[~np.isin(labels, clusters_labels)] = -1
 
         return torch.tensor(labels, dtype=torch.int64, device=points.device)

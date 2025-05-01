@@ -331,14 +331,14 @@ class Obj_cache:
             print(f"Instance {instance_id} not found in class {class_id}.")
 
     def update_step(self):
-        del_list = []
-        for i in range(len(self.prev_instances)):
-            for j in self.prev_instances[i].keys():
-                self.prev_instances[i][j].life -= 1
-                if self.prev_instances[i][j].life < 0:
-                    del_list.append((i, j))
-        for i, j in del_list:
-            self.del_instance(i, j)
+        for i, instance_dict in enumerate(self.prev_instances):
+            keys_to_delete = []
+            for key, obj in instance_dict.items():
+                obj.life -= 1
+                if obj.life < 0:
+                    keys_to_delete.append(key)
+            for key in keys_to_delete:
+                self.del_instance(i, key)
 
 @dataclass
 class Instance_data:

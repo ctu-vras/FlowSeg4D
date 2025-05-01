@@ -111,30 +111,26 @@ class PanSegmenter:
         times.append(time.time())
 
         # upsample to original resolution
-        out_upsample = []
-        data["upsample"] = [up.to(self.device) for up in data["upsample"]]
-        for id_b, closest_point in enumerate(data["upsample"]):
-            temp = out[id_b, :, closest_point]
-            out_upsample.append(temp.T)
+        data["upsample"] = data["upsample"][0].to(self.device)
+        out_upsample = out[0, :, data["upsample"]].T
         times.append(time.time())
 
         # get instance prediction
-        src_points = feat[0, :, data["upsample"][0]].T[:, 1:4]
-        src_points = src_points.to(self.device)
-        src_features = tokens[0, :, batch["upsample"][0]].T
+        src_points = feat[0, 1:4, data["upsample"]].T
+        src_features = tokens[0, :, data["upsample"]].T
 
         # ego motion compensation
         src_points_ego = transform_pointcloud(src_points, data["ego"][0].to(self.device))
 
         # get semantic class
-        src_pred = out_upsample[0].argmax(dim=1).to(self.device)
+        src_pred = out_upsample.argmax(dim=1).unsqueeze(1)
 
         # clustering
-        src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
+        src_points = torch.cat((src_points, src_pred), axis=1)
         src_labels = self.clusterer.get_semantic_clustering(src_points)
 
         # create data - ego compensated xyz + features + semantic class + cluster id
-        src_points = torch.cat((src_points_ego, src_features, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
+        src_points = torch.cat((src_points_ego, src_features, src_pred, src_labels.unsqueeze(1)), axis=1)
         times.append(time.time())
 
         # associate -- set temporally consistent instance id

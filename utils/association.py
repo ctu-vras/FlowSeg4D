@@ -30,8 +30,8 @@ def association(
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: The updated indices for points in both sets.
     """
-    indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32)
-    indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32)
+    indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32, device=points_t1.device)
+    indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32, device=points_t2.device)
 
     curr_id = 1 if ind_cache is None else ind_cache.max_id + 1
 
@@ -57,7 +57,7 @@ def association(
         # If no clusters are found in t1, assign new ids to t2
         if clusters_t1.numel() == 0:
             for cluster_id in clusters_t2:
-                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
+                mask = class_mask_t2 & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
                 curr_id += 1
             continue
@@ -65,7 +65,7 @@ def association(
         # If no clusters are found in t2, assign ids to t1
         if clusters_t2.numel() == 0:
             for cluster_id in clusters_t1:
-                mask = (class_mask_t1) & (points_t1[:, -1] == cluster_id)
+                mask = class_mask_t1 & (points_t1[:, -1] == cluster_id)
                 if prev_ind is None:  # if prev_ind is not provided, assign new ids
                     indices_t1[mask] = curr_id
                     curr_id += 1
@@ -91,8 +91,8 @@ def association(
         row_ind, col_ind = linear_sum_assignment(assoc_cost.cpu().numpy())
         used_row, used_col = set(row_ind), set(col_ind)
         for i, j in zip(row_ind, col_ind):
-            mask_t1 = (class_mask_t1) & (points_t1[:, -1] == clusters_t1[i])
-            mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[j])
+            mask_t1 = class_mask_t1 & (points_t1[:, -1] == clusters_t1[i])
+            mask_t2 = class_mask_t2 & (points_t2[:, -1] == clusters_t2[j])
             if assoc_cost[i, j] > 1e8:  # threshold for association
                 indices_t1[mask_t1] = (
                     curr_id if prev_ind is None else prev_ind[mask_t1][0]
@@ -111,7 +111,7 @@ def association(
             for i, cluster_id in enumerate(clusters_t1):
                 if i in used_row:
                     continue
-                mask = (class_mask_t1) & (points_t1[:, -1] == cluster_id)
+                mask = class_mask_t1 & (points_t1[:, -1] == cluster_id)
                 if prev_ind is None:
                     indices_t1[mask] = curr_id
                     curr_id += 1
@@ -121,12 +121,10 @@ def association(
             for j, cluster_id in enumerate(clusters_t2):
                 if j in used_col:
                     continue
-                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
+                mask = class_mask_t2 & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
                 curr_id += 1
 
-    indices_t1 = indices_t1.to(points_t1.device)
-    indices_t2 = indices_t2.to(points_t2.device)
     return indices_t1, indices_t2
 
 def long_association(
@@ -134,7 +132,7 @@ def long_association(
     points_t2: torch.Tensor,
     config: dict,
     prev_ind: Optional[torch.Tensor] = None,
-    obj_cache: Optional[Obj_cache] = None,
+    obj_cache: Obj_cache = None,
     flow: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -159,12 +157,11 @@ def long_association(
 
     # Update object cache -> remove old instances
     obj_cache.update_step()
+    curr_id = obj_cache.max_id + 1
 
     # Initialize indices for t1 and t2
-    indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32)
-    indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32)
-
-    curr_id = 1 if obj_cache is None else obj_cache.max_id + 1
+    indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32, device=points_t1.device)
+    indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32, device=points_t2.device)
 
     for class_id in config["fore_classes"]:
         # Get the centers of clusters for the current class
@@ -192,31 +189,29 @@ def long_association(
         # If no clusters are found in t1, assign new ids to t2
         if clusters_t1.numel() == 0:
             for i, cluster_id in enumerate(clusters_t2):
-                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
+                mask = class_mask_t2 & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
-                instance = Instance_data(
+                obj_cache.add_instance(class_id, Instance_data(
                     id=curr_id,
                     cl_id=cluster_id,
                     life=config["association"]["life"],
                     center=centers_t2[i],
                     feature=features_t2[i],
-                )
-                obj_cache.add_instance(class_id, instance)
+                ))
                 curr_id += 1
             continue
 
         prev_insts = obj_cache.prev_instances[class_id]
         centers_t1_o = centers_t1.clone()
-        if len(prev_insts) == 0:
+        if not prev_insts:
             for i, cluster_id in enumerate(clusters_t1):
-                new_inst = Instance_data(
+                obj_cache.add_instance(class_id, Instance_data(
                     id=curr_id,
                     cl_id=cluster_id,
                     life=config["association"]["life"] - 1,
                     center=centers_t1[i],
                     feature=features_t1[i],
-                )
-                obj_cache.add_instance(class_id, new_inst)
+                ))
                 curr_id += 1
         else:
             features_t1 = torch.stack(
@@ -229,26 +224,18 @@ def long_association(
 
         # If no clusters are found in t2, assign ids to t1
         if clusters_t2.numel() == 0:
-            life_mask = torch.zeros(len(prev_insts_keys), dtype=torch.bool)
-            for i in range(len(prev_insts_keys)):
-                if prev_insts[prev_insts_keys[i]].life == config["association"]["life"] - 1:
-                    life_mask[i] = True
-            dists = torch.cdist(centers_t1_o, centers_t1[life_mask], p=2)
-            flow_dist = torch.norm(flow_t1, dim=1)
-            for i in range(len(centers_t1_o)):
-                min_dist = torch.argmin(dists[i])
-                if dists[i, min_dist] < (flow_dist[i] + 1e-4):
-                    prev_inst = prev_insts[prev_insts_keys[min_dist]]
-                    mask = (class_mask_t1) & (points_t1[:, -1] == prev_inst.cl_id)
-                    indices_t1[mask] = prev_inst.id
-                else:
-                    print("Cluster in t1 not found")
-                    print(dists[i, min_dist])
-                    print(centers_t1_o[i])
-                    print(centers_t1[min_dist])
-                    print(flow_t1[i])
-                    print(torch.norm(flow_t1[i]))
-                    exit()
+            life_mask = torch.tensor([prev_insts[k].life == config["association"]["life"] - 1 for k in prev_insts_keys], device=centers_t1.device)
+            if life_mask.any():
+                dists = torch.cdist(centers_t1_o, centers_t1[life_mask], p=2)
+                flow_dist = torch.norm(flow_t1, dim=1)
+                for i in range(len(centers_t1_o)):
+                    min_dist_idx = dists[i].argmin()
+                    if dists[i, min_dist_idx] < (flow_dist[i] + 1e-4):
+                        prev_inst = prev_insts[prev_insts_keys[min_dist_idx]]
+                        mask = class_mask_t1 & (points_t1[:, -1] == prev_inst.cl_id)
+                        indices_t1[mask] = prev_inst.id
+                    else:
+                        raise RuntimeError("Cluster in t1 not found")
             continue
 
         # Calculate the association cost
@@ -269,32 +256,30 @@ def long_association(
 
         for row, col in zip(row_ind, col_ind):
             prev_inst = prev_insts[prev_insts_keys[row]]
-            mask_t1 = (class_mask_t1) & (points_t1[:, -1] == prev_inst.cl_id)
-            mask_t2 = (class_mask_t2) & (points_t2[:, -1] == clusters_t2[col])
+            mask_t1 = class_mask_t1 & (points_t1[:, -1] == prev_inst.cl_id)
+            mask_t2 = class_mask_t2 & (points_t2[:, -1] == clusters_t2[col])
             if assoc_cost[row, col] < 1e8:
                 if prev_inst.life == config["association"]["life"] - 1:
                     indices_t1[mask_t1] = prev_inst.id
                 indices_t2[mask_t2] = prev_inst.id
-                new_inst = Instance_data(
+                add_instances.append(Instance_data(
                     id=prev_inst.id,
                     cl_id=clusters_t2[col],
                     life=config["association"]["life"],
                     center=centers_t2[col],
                     feature=(features_t2[col] + features_t1[row]) / 2,
-                )
-                add_instances.append(new_inst)
+                ))
             else:
                 if prev_inst.life == config["association"]["life"] - 1:
                     indices_t1[mask_t1] = prev_inst.id
                 indices_t2[mask_t2] = curr_id
-                new_inst = Instance_data(
+                add_instances.append(Instance_data(
                     id=curr_id,
                     cl_id=clusters_t2[col],
                     life=config["association"]["life"],
                     center=centers_t2[col],
                     feature=features_t2[col],
-                )
-                add_instances.append(new_inst)
+                ))
                 curr_id += 1
 
         # Handle the case where the number of clusters in t1 and t2 are different
@@ -311,22 +296,19 @@ def long_association(
             for j, cluster_id in enumerate(clusters_t2):
                 if j in used_col:
                     continue
-                mask = (class_mask_t2) & (points_t2[:, -1] == cluster_id)
+                mask = class_mask_t2 & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
-                new_inst = Instance_data(
+                add_instances.append(Instance_data(
                     id=curr_id,
                     cl_id=cluster_id,
                     life=config["association"]["life"],
                     center=centers_t2[j],
                     feature=features_t2[j],
-                )
-                add_instances.append(new_inst)
+                ))
                 curr_id += 1
 
         # Update the object cache with new instances
         for inst in add_instances:
             obj_cache.add_instance(class_id, inst)
 
-    indices_t1 = indices_t1.to(points_t1.device)
-    indices_t2 = indices_t2.to(points_t2.device)
     return indices_t1, indices_t2
