@@ -1,6 +1,7 @@
 import argparse
 
 import torch
+import numpy as np
 
 from WaffleIron.waffleiron import Segmenter
 from ScaLR.datasets import LIST_DATASETS, Collate
@@ -258,6 +259,11 @@ if __name__ == "__main__":
     evaluator = EvalPQ4D(config["classif"]["nb_class"], config_panseg["ignore_classes"])
     clusterer = Clusterer(config_panseg)
 
+    # For SemanticKITTI initialize inverse mapping
+    if args.dataset == "semantic_kitti":
+        sem_kitti = load_model_config("configs/semantic-kitti.yaml")
+        mapper = np.vectorize(sem_kitti["learning_map_inv"].__getitem__)
+
     for i, batch in enumerate(dataloader):
         # network inputs
         feat = batch["feat"].to(device)
@@ -364,7 +370,6 @@ if __name__ == "__main__":
         start_idx = 0
         for batch_id in range(batch_size):
             end_idx = start_idx + batch["upsample"][batch_id].shape[0]
-            print(list(predictions.keys()))
             if batch_id not in predictions:
                 start_idx = end_idx
                 continue
@@ -383,6 +388,8 @@ if __name__ == "__main__":
 
             # save segmentation files
             if args.save_path is not None:
+                if args.dataset == "semantic_kitti":
+                    predictions[batch_id] = mapper(predictions[batch_id])
                 save_data(
                     args.save_path,
                     batch["scene"][batch_id]["name"],
