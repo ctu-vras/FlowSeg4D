@@ -4,17 +4,18 @@ import torch
 import numpy as np
 
 from WaffleIron.waffleiron import Segmenter
-from ScaLR.datasets import LIST_DATASETS, Collate
 
 from utils.eval import EvalPQ4D
 from utils.clustering import Clusterer
+from utils.dataloaders import get_dataloader, get_datasets
 from utils.association import association, long_association
 from utils.misc import (
     Obj_cache,
+    save_data,
+    print_config,
+    process_configs,
     load_model_config,
     transform_pointcloud,
-    print_config,
-    save_data,
 )
 
 torch.set_default_tensor_type(torch.FloatTensor)
@@ -81,130 +82,31 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_datasets(config, args):
-    # Get datatset
-    DATASET = LIST_DATASETS.get(args.dataset.lower())
-    if DATASET is None:
-        raise ValueError(f"Dataset {args.dataset.lower()} not available.")
-
-    # Shared parameters
-    kwargs = {
-        "rootdir": args.path_dataset,
-        "input_feat": config["embedding"]["input_feat"],
-        "voxel_size": config["embedding"]["voxel_size"],
-        "num_neighbors": config["embedding"]["neighbors"],
-        "dim_proj": config["waffleiron"]["dim_proj"],
-        "grids_shape": config["waffleiron"]["grids_size"],
-        "fov_xyz": config["waffleiron"]["fov_xyz"],
-        "verbose": args.verbose,
-    }
-
-    # Get phase
-    if args.eval:
-        phase = "val"
-    elif args.test:
-        phase = "test"
-    else:
-        phase = "train"
-
-    dataset = DATASET(
-        phase=phase,
-        **kwargs,
-    )
-
-    return dataset
-
-
-def get_dataloader(dataset, args):
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.workers,
-        pin_memory=True,
-        sampler=None,
-        drop_last=not args.eval and not args.test,
-        collate_fn=Collate(),
-    )
-
-    return dataloader
-
-
 if __name__ == "__main__":
     args = parse_args()
+    args.workers = 0
 
     # Load config files
     config_panseg = load_model_config("configs/config.yaml")
-    config = load_model_config(config_panseg[args.dataset]["config_downstream"])
     config_pretrain = load_model_config(args.config_pretrain)
+    config_model = load_model_config(config_panseg[args.dataset]["config_downstream"])
 
-    config_panseg["num_classes"] = config["classif"]["nb_class"]
-    config_panseg["fore_classes"] = config_panseg[args.dataset]["fore_classes"]
-    config_panseg["ignore_classes"] = None
-    if args.clustering is not None:
-        config_panseg["clustering"]["clustering_method"] = args.clustering.lower()
-    if config_panseg["clustering"]["clustering_method"] == "alpine":
-        config_panseg["alpine"]["BBOX_WEB"] = config_panseg[args.dataset]["bbox_web"]
-        config_panseg["alpine"]["BBOX_DATASET"] = config_panseg[args.dataset]["bbox_dataset"]
-    if args.short:
-        config_panseg["association"]["use_long"] = False
-    else:
-        config_panseg["association"]["use_long"] = True
-
+    process_configs(args, config_panseg, config_pretrain, config_model)
     config_msg = print_config(args, config_panseg)
-
-    # Merge config files
-    # Embeddings
-    config["embedding"] = {}
-    config["embedding"]["input_feat"] = config_pretrain["point_backbone"][
-        "input_features"
-    ]
-    config["embedding"]["size_input"] = config_pretrain["point_backbone"]["size_input"]
-    config["embedding"]["neighbors"] = config_pretrain["point_backbone"][
-        "num_neighbors"
-    ]
-    config["embedding"]["voxel_size"] = config_pretrain["point_backbone"]["voxel_size"]
-    # Backbone
-    config["waffleiron"]["depth"] = config_pretrain["point_backbone"]["depth"]
-    config["waffleiron"]["num_neighbors"] = config_pretrain["point_backbone"][
-        "num_neighbors"
-    ]
-    config["waffleiron"]["dim_proj"] = config_pretrain["point_backbone"]["dim_proj"]
-    config["waffleiron"]["nb_channels"] = config_pretrain["point_backbone"][
-        "nb_channels"
-    ]
-    config["waffleiron"]["pretrain_dim"] = config_pretrain["point_backbone"]["nb_class"]
-    config["waffleiron"]["layernorm"] = config_pretrain["point_backbone"]["layernorm"]
-
-    # For datasets which need larger FOV for finetuning...
-    if config["dataloader"].get("new_grid_shape") is not None:
-        # ... overwrite config used at pretraining
-        config["waffleiron"]["grids_size"] = config["dataloader"]["new_grid_shape"]
-    else:
-        # ... otherwise keep default value
-        config["waffleiron"]["grids_size"] = config_pretrain["point_backbone"][
-            "grid_shape"
-        ]
-    if config["dataloader"].get("new_fov") is not None:
-        config["waffleiron"]["fov_xyz"] = config["dataloader"]["new_fov"]
-    else:
-        config["waffleiron"]["fov_xyz"] = config_pretrain["point_backbone"]["fov"]
 
     # Build network
     model = Segmenter(
-        input_channels=config["embedding"]["size_input"],
-        feat_channels=config["waffleiron"]["nb_channels"],
-        depth=config["waffleiron"]["depth"],
-        grid_shape=config["waffleiron"]["grids_size"],
-        nb_class=config["classif"]["nb_class"],
-        drop_path_prob=config["waffleiron"]["drop_path"],
-        layer_norm=config["waffleiron"]["layernorm"],
+        input_channels=config_model["embedding"]["size_input"],
+        feat_channels=config_model["waffleiron"]["nb_channels"],
+        depth=config_model["waffleiron"]["depth"],
+        grid_shape=config_model["waffleiron"]["grids_size"],
+        nb_class=config_model["classif"]["nb_class"],
+        drop_path_prob=config_model["waffleiron"]["drop_path"],
+        layer_norm=config_model["waffleiron"]["layernorm"],
     )
 
-    args.workers = 0
-
     # Load dataset
-    dataset = get_datasets(config, args)
+    dataset = get_datasets(config_model, args)
     dataloader = get_dataloader(dataset, args)
 
     # Load pretrained model
@@ -219,16 +121,15 @@ if __name__ == "__main__":
 
     # Adding classification layer
     model.classif = torch.nn.Conv1d(
-        config["waffleiron"]["nb_channels"], config["waffleiron"]["pretrain_dim"], 1
+        config_model["waffleiron"]["nb_channels"], config_model["waffleiron"]["pretrain_dim"], 1
     )
-
     classif = torch.nn.Conv1d(
-        config["waffleiron"]["nb_channels"], config["classif"]["nb_class"], 1
+        config_model["waffleiron"]["nb_channels"], config_model["classif"]["nb_class"], 1
     )
     torch.nn.init.constant_(classif.bias, 0)
     torch.nn.init.constant_(classif.weight, 0)
     model.classif = torch.nn.Sequential(
-        torch.nn.BatchNorm1d(config["waffleiron"]["nb_channels"]),
+        torch.nn.BatchNorm1d(config_model["waffleiron"]["nb_channels"]),
         classif,
     )
 
@@ -245,7 +146,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Initialize cache
-    ind_cache = Obj_cache(config["classif"]["nb_class"])
+    ind_cache = Obj_cache(config_model["classif"]["nb_class"])
     prev_ind = None
     prev_scene = None
     prev_sample = None
@@ -256,7 +157,7 @@ if __name__ == "__main__":
     model.eval()
 
     # Initialize
-    evaluator = EvalPQ4D(config["classif"]["nb_class"], config_panseg["ignore_classes"])
+    evaluator = EvalPQ4D(config_model["classif"]["nb_class"], config_panseg["ignore_classes"])
     clusterer = Clusterer(config_panseg)
 
     # For SemanticKITTI initialize inverse mapping

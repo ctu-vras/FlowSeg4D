@@ -1,5 +1,6 @@
 import os
 import copy
+import argparse
 from dataclasses import dataclass
 from typing import Union, Tuple, Optional
 
@@ -8,12 +9,59 @@ import torch
 import numpy as np
 
 
-def load_model_config(file):
+###############################
+# IO functions
+###############################
+
+def load_model_config(file: str) -> dict:
+    """
+    Load the model configuration from a YAML file.
+    Args:
+        file (str): The path to the YAML file.
+    Returns:
+        dict: The loaded configuration.
+    """
     with open(file, "r") as f:
         config = yaml.safe_load(f)
     return config
 
-def print_config(args, config):
+def save_data(
+        save_path: str, scene_name: str, filename: str, semantic: torch.Tensor, instance: torch.Tensor
+) -> None:
+    """
+    Save the data to a file.
+    Args:
+        save_path (str): The path to save the data.
+        scene_name (str): The name of the scene.
+        filename (str): The path to the original file.
+        semantic (torch.Tensor): The semantic labels.
+        instance (torch.Tensor): The instance labels.
+    """
+    save_dir = os.path.join(save_path, scene_name, "predictions")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    filename = filename.split("/")[-1].split(".")[0] + ".label"
+    save_file = os.path.join(save_dir, filename)
+    save_data = (instance.astype(np.uint32) << 16) | semantic.astype(np.uint32)
+
+    save_data.tofile(save_file)
+
+    exit()
+
+###############################
+# Config functions
+###############################
+
+def print_config(args: argparse.Namespace, config: dict) -> str:
+    """
+    Print the configuration settings.
+    Args:
+        args (argparse.Namespace): The arguments passed to the script.
+        config (dict): The configuration settings.
+    Returns:
+        str: The formatted configuration string.
+    """
     msg = ""
     msg += f"Dataset: {args.dataset}\n"
     msg += f"  path: {args.path_dataset}\n"
@@ -63,27 +111,71 @@ def print_config(args, config):
     print(msg)
     return msg
 
-
-def save_data(save_path, scene_name, filename, semantic, instance):
+def process_configs(
+        args: argparse.Namespace, config_panseg: dict, config_pretrain: dict, config_model: dict
+) -> None:
     """
-    Save the data to a file.
+    Process the config files and merge different configurations.
     Args:
-        save_path (str): The path to save the data.
-        scene_name (str): The name of the scene.
-        filename (str): The path to the original file.
-        semantic (torch.Tensor): The semantic labels.
-        instance (torch.Tensor): The instance labels.
+        args (argparse.Namespace): The arguments passed to the script.
+        config_panseg (dict): The config file for panseg.
+        config_pretrain (dict): The config file for pretraining.
+        config_model (dict): The config file for the model.
     """
-    save_dir = os.path.join(save_path, scene_name, "predictions")
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    config_panseg["num_classes"] = config_model["classif"]["nb_class"]
+    config_panseg["fore_classes"] = config_panseg[args.dataset]["fore_classes"]
+    config_panseg["ignore_classes"] = None
+    if args.clustering is not None:
+        config_panseg["clustering"]["clustering_method"] = args.clustering.lower()
+    if config_panseg["clustering"]["clustering_method"] == "alpine":
+        config_panseg["alpine"]["BBOX_WEB"] = config_panseg[args.dataset]["bbox_web"]
+        config_panseg["alpine"]["BBOX_DATASET"] = config_panseg[args.dataset]["bbox_dataset"]
+    if args.short:
+        config_panseg["association"]["use_long"] = False
+    else:
+        config_panseg["association"]["use_long"] = True
 
-    filename = filename.split("/")[-1].split(".")[0] + ".label"
-    save_file = os.path.join(save_dir, filename)
-    save_data = (instance.astype(np.uint32) << 16) | semantic.astype(np.uint32)
+    # Merge config files
+    # Embeddings
+    config_model["embedding"] = {}
+    config_model["embedding"]["input_feat"] = config_pretrain["point_backbone"][
+        "input_features"
+    ]
+    config_model["embedding"]["size_input"] = config_pretrain["point_backbone"]["size_input"]
+    config_model["embedding"]["neighbors"] = config_pretrain["point_backbone"][
+        "num_neighbors"
+    ]
+    config_model["embedding"]["voxel_size"] = config_pretrain["point_backbone"]["voxel_size"]
 
-    save_data.tofile(save_file)
+    # Backbone
+    config_model["waffleiron"]["depth"] = config_pretrain["point_backbone"]["depth"]
+    config_model["waffleiron"]["num_neighbors"] = config_pretrain["point_backbone"][
+        "num_neighbors"
+    ]
+    config_model["waffleiron"]["dim_proj"] = config_pretrain["point_backbone"]["dim_proj"]
+    config_model["waffleiron"]["nb_channels"] = config_pretrain["point_backbone"][
+        "nb_channels"
+    ]
+    config_model["waffleiron"]["pretrain_dim"] = config_pretrain["point_backbone"]["nb_class"]
+    config_model["waffleiron"]["layernorm"] = config_pretrain["point_backbone"]["layernorm"]
 
+    # For datasets which need larger FOV for finetuning...
+    if config_model["dataloader"].get("new_grid_shape") is not None:
+        # ... overwrite config used at pretraining
+        config_model["waffleiron"]["grids_size"] = config_model["dataloader"]["new_grid_shape"]
+    else:
+        # ... otherwise keep default value
+        config_model["waffleiron"]["grids_size"] = config_pretrain["point_backbone"][
+            "grid_shape"
+        ]
+    if config_model["dataloader"].get("new_fov") is not None:
+        config_model["waffleiron"]["fov_xyz"] = config_model["dataloader"]["new_fov"]
+    else:
+        config_model["waffleiron"]["fov_xyz"] = config_pretrain["point_backbone"]["fov"]
+
+###############################
+# Transformations
+###############################
 
 def transform_pointcloud(
     points: torch.Tensor, transform_matrix: Union[torch.Tensor, np.ndarray]
@@ -112,7 +204,6 @@ def transform_pointcloud(
     points_tr = torch.mm(transform_matrix, points_tr.T).T
 
     return points_tr[:, :3]
-
 
 def get_centers_for_class(
     points: torch.Tensor,
@@ -167,6 +258,10 @@ def get_centers_for_class(
             )
 
     return centers.double(), clusters
+
+###############################
+# Data classes
+###############################
 
 @dataclass
 class Obj_cache:
