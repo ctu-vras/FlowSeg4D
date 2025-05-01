@@ -1,3 +1,4 @@
+import os
 import time
 import argparse
 
@@ -30,6 +31,8 @@ class PanSegmenter:
         process_configs(args, config_panseg, config_pretrain, config_model)
         config_msg = print_config_cont(args, config_panseg)
         if args.save_path is not None:
+            if not os.path.exists(args.save_path):
+                os.makedirs(args.save_path)
             with open(f"{args.save_path}/config.txt", "w") as f:
                 f.write(config_msg)
 
@@ -136,21 +139,18 @@ class PanSegmenter:
 
         # associate -- set temporally consistent instance id
         ind_src = None
-        if self.prev_points is None:
-            self.prev_points = torch.zeros_like(src_points)
-        if self.prev_scene is None:
-            self.prev_scene = data["scene"][0]
-
-        if self.prev_scene["token"] == data["scene"][0]["token"]:
-            if self.config["association"]["use_long"]:
-                _, ind_src = long_association(self.prev_points, src_points, self.config, self.prev_ind, self.obj_cache, None)
-            else:
-                _, ind_src = association(self.prev_points, src_points, self.config, self.prev_ind, self.obj_cache, None)
-            self.prev_ind = ind_src
-            self.obj_cache.max_id = int(max(self.prev_ind.max(), ind_src.max()))
-        else:
+        if self.prev_scene is None or not self.prev_scene["token"] == data["scene"][0]["token"]:
             self.prev_ind = None
             self.obj_cache.reset()
+            self.prev_points = torch.zeros_like(src_points)
+
+        if self.config["association"]["use_long"]:
+            _, ind_src = long_association(self.prev_points, src_points, self.config, self.prev_ind, self.obj_cache, None)
+        else:
+            _, ind_src = association(self.prev_points, src_points, self.config, self.prev_ind, self.obj_cache, None)
+        self.prev_ind = ind_src
+        self.obj_cache.max_id = int(max(self.prev_ind.max(), ind_src.max()))
+
         self.prev_points = src_points
         self.prev_scene = data["scene"][0]
         times.append(time.time())
@@ -167,7 +167,7 @@ class PanSegmenter:
 
         if args.verbose:
             print(
-                f"Total time: {times[6] - times[0]:.2f} s\n"
+                f"Total time: {times[5] - times[0]:.2f} s\n"
                 f"  SemSeg data prep: {times[1] - times[0]:.2f} | "
                 f"Semantic segmentation: {times[2] - times[1]:.2f} | "
                 f"Upsample: {times[3] - times[2]:.2f} | "
@@ -247,5 +247,10 @@ if __name__ == "__main__":
     # Initialize segmenter
     segmenter = PanSegmenter(args)
 
-    for i, batch in enumerate(dataloader):
-        segmenter(batch)
+    try:
+        for i, batch in enumerate(dataloader):
+            segmenter(batch)
+    except KeyboardInterrupt:
+        print("Keyboard interrupt, exiting...")
+    except Exception as e:
+        raise e
