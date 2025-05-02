@@ -3,7 +3,7 @@ import hdbscan
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-from Alpine.alpine import Alpine
+from alpine import Alpine
 
 
 class Clusterer:
