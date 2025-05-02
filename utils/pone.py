@@ -42,7 +42,7 @@ def process_raw_dataset(args):
             split_dir = os.path.join(dataset_path, split_dir)
             if not os.path.exists(split_dir):
                 raise FileNotFoundError(f"Split directory {split_dir} does not exist")
-            for scene_dir in tqdm.tqdm(os.listdir(split_dir).sorted()):
+            for scene_dir in tqdm.tqdm(sorted(os.listdir(split_dir))):
                 if os.path.isdir(os.path.join(split_dir, scene_dir)):
                     process_scene(args, os.path.join(split_dir, scene_dir), list_frame[split_id], data_split[split_id])
         print(f"Processing completed for {data_split[split_id]} split found {len(list_frame[split_id])} frames\n")
@@ -80,7 +80,7 @@ def process_scene(args, scene_dir, list_frame, split_name):
         )
 
         # Append the frame to the list
-        list_frame.append((save_path, i, filename))
+        list_frame.append((os.path.join(split_name, filename), i, filename))
 
 def calculate_intensity(args):
     if not args.dataset.lower() == "pone":
@@ -101,7 +101,7 @@ def calculate_intensity(args):
             split_dir = os.path.join(dataset_path, split_dir)
             if not os.path.exists(split_dir):
                 raise FileNotFoundError(f"Split directory {split_dir} does not exist")
-            for scene_dir in tqdm.tqdm(os.listdir(split_dir).sorted()):
+            for scene_dir in tqdm.tqdm(sorted(os.listdir(split_dir))):
                 if os.path.isdir(os.path.join(split_dir, scene_dir)):
                     process_scene_intensity(os.path.join(split_dir, scene_dir), intensity_values)
 

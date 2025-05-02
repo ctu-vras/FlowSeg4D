@@ -12,7 +12,7 @@ pip install hdbscan
 pip install open3d typing_extensions requests pyarrow
 pip install pyaml tqdm tensorboard nuscenes-devkit pandas transforms3d
 pip install -e WaffleIron/
-pip install -e Alpine/
+pip install git+https://github.com/valeoai/Alpine
 
 ##### Download models and install ScaLR
 # cd ScaLR
@@ -24,6 +24,10 @@ pip install -e Alpine/
 # wget https://github.com/valeoai/ScaLR/releases/download/v0.1.0/WI_768-DINOv2_ViT_L_14-NS_KI_PD-linear_probing-nuscenes.tar.gz
 # tar -xvzf WI_768-DINOv2_ViT_L_14-NS_KI_PD-linear_probing-nuscenes.tar.gz
 # rm WI_768-DINOv2_ViT_L_14-NS_KI_PD-linear_probing-nuscenes.tar.gz
+
+# wget https://github.com/valeoai/ScaLR/releases/download/v0.1.0/WI_768-DINOv2_ViT_L_14-NS_KI_PD-linear_probing-kitti.tar.gz
+# tar -xvzf WI_768-DINOv2_ViT_L_14-NS_KI_PD-linear_probing-kitti.tar.gz
+# rm WI_768-DINOv2_ViT_L_14-NS_KI_PD-linear_probing-kitti.tar.gz
 
 # wget https://github.com/valeoai/ScaLR/releases/download/v0.1.0/WI_768-DINOv2_ViT_L_14-NS_KI_PD-pretrained.tar.gz
 # tar -xvzf WI_768-DINOv2_ViT_L_14-NS_KI_PD-pretrained.tar.gz

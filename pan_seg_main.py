@@ -1,3 +1,4 @@
+import os
 import time
 import argparse
 
@@ -96,6 +97,11 @@ if __name__ == "__main__":
 
     process_configs(args, config_panseg, config_pretrain, config_model)
     config_msg = print_config(args, config_panseg)
+    if args.save_path is not None:
+        if not os.path.exists(args.save_path):
+            os.makedirs(args.save_path)
+        with open(f"{args.save_path}/config.txt", "w") as f:
+            f.write(config_msg)
 
     # Build network
     model = Segmenter(
@@ -106,6 +112,20 @@ if __name__ == "__main__":
         nb_class=config_model["classif"]["nb_class"],
         drop_path_prob=config_model["waffleiron"]["drop_path"],
         layer_norm=config_model["waffleiron"]["layernorm"],
+    )
+
+    # Adding classification layer
+    model.classif = torch.nn.Conv1d(
+        config_model["waffleiron"]["nb_channels"], config_model["waffleiron"]["pretrain_dim"], 1
+    )
+    classif = torch.nn.Conv1d(
+        config_model["waffleiron"]["nb_channels"], config_model["classif"]["nb_class"], 1
+    )
+    torch.nn.init.constant_(classif.bias, 0)
+    torch.nn.init.constant_(classif.weight, 0)
+    model.classif = torch.nn.Sequential(
+        torch.nn.BatchNorm1d(config_model["waffleiron"]["nb_channels"]),
+        classif,
     )
 
     # Load dataset
@@ -122,23 +142,6 @@ if __name__ == "__main__":
         else:
             new_ckpt[k] = ckpt[k]
 
-    # Adding classification layer
-    model.classif = torch.nn.Conv1d(
-        config_model["waffleiron"]["nb_channels"], config_model["waffleiron"]["pretrain_dim"], 1
-    )
-    classif = torch.nn.Conv1d(
-        config_model["waffleiron"]["nb_channels"], config_model["classif"]["nb_class"], 1
-    )
-    torch.nn.init.constant_(classif.bias, 0)
-    torch.nn.init.constant_(classif.weight, 0)
-    model.classif = torch.nn.Sequential(
-        torch.nn.BatchNorm1d(config_model["waffleiron"]["nb_channels"]),
-        classif,
-    )
-
-    # Load pretrained weights
-    model.load_state_dict(new_ckpt)
-
     # Set device
     device = "cpu"
     if torch.cuda.is_available():
@@ -148,20 +151,18 @@ if __name__ == "__main__":
             device = "cuda"
     device = torch.device(device)
 
-    # Initialize cache
-    ind_cache = Obj_cache(config_model["classif"]["nb_class"])
-    prev_ind = None
-    prev_scene = None
-    prev_sample = None
-    prev_points = None
-
     # Set model to evaluation mode
+    model.load_state_dict(new_ckpt)
     model = model.to(device)
     model.eval()
 
     # Initialize
-    evaluator = EvalPQ4D(config_model["classif"]["nb_class"], config_panseg["ignore_classes"])
+    prev_ind = None
+    prev_scene = None
+    prev_points = None
     clusterer = Clusterer(config_panseg)
+    ind_cache = Obj_cache(config_model["classif"]["nb_class"])
+    evaluator = EvalPQ4D(config_model["classif"]["nb_class"], config_panseg["ignore_classes"])
 
     # For SemanticKITTI initialize inverse mapping
     if args.dataset == "semantic_kitti":
@@ -182,7 +183,7 @@ if __name__ == "__main__":
         scene_flow = batch["scene_flow"].to(device)
 
         # get semantic class prediction
-        with torch.no_grad():
+        with torch.inference_mode():
             out, tokens = model(*net_inputs)
 
         # upsample to original resolution
@@ -198,10 +199,8 @@ if __name__ == "__main__":
         predictions = {}
         batch_size = batch["feat"].shape[0]
         for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
-            src_points = feat[src_id, :, batch["upsample"][src_id]].T[:, 1:4]
-            src_points = src_points.to(device)
-            dst_points = feat[dst_id, :, batch["upsample"][dst_id]].T[:, 1:4]
-            dst_points = dst_points.to(device)
+            src_points = feat[src_id, 1:4, batch["upsample"][src_id]].T[:, 1:4]
+            dst_points = feat[dst_id, 1:4, batch["upsample"][dst_id]].T[:, 1:4]
 
             src_features = tokens[src_id, :, batch["upsample"][src_id]].T
             dst_features = tokens[dst_id, :, batch["upsample"][dst_id]].T
@@ -217,8 +216,8 @@ if __name__ == "__main__":
 
             # get semantic class
             if not args.use_gt:
-                src_pred = out_upsample[src_id].argmax(dim=1).to(device)
-                dst_pred = out_upsample[dst_id].argmax(dim=1).to(device)
+                src_pred = out_upsample[src_id].argmax(dim=1).unsqueeze(1)
+                dst_pred = out_upsample[dst_id].argmax(dim=1).unsqueeze(1)
             else:
                 e_idx = s_idx + batch["upsample"][src_id].shape[0]
                 src_pred = labels[s_idx:e_idx].to(device)
@@ -226,15 +225,15 @@ if __name__ == "__main__":
                 s_idx = e_idx
 
             # clustering
-            src_points = torch.cat((src_points, src_pred.unsqueeze(1)), axis=1)
-            dst_points = torch.cat((dst_points, dst_pred.unsqueeze(1)), axis=1)
+            src_points = torch.cat((src_points, src_pred), axis=1)
+            dst_points = torch.cat((dst_points, dst_pred), axis=1)
 
             src_labels = clusterer.get_semantic_clustering(src_points)
             dst_labels = clusterer.get_semantic_clustering(dst_points)
 
             # create data - ego compensated xyz + features + semantic class + cluster id
-            src_points = torch.cat((src_points_ego, src_features, src_pred.unsqueeze(1), src_labels.unsqueeze(1)), axis=1)
-            dst_points = torch.cat((dst_points_ego, dst_features, dst_pred.unsqueeze(1), dst_labels.unsqueeze(1)), axis=1)
+            src_points = torch.cat((src_points_ego, src_features, src_pred, src_labels.unsqueeze(1)), axis=1)
+            dst_points = torch.cat((dst_points_ego, dst_features, dst_pred, dst_labels.unsqueeze(1)), axis=1)
 
             # associate -- set temporally consistent instance id
             ind_src, ind_dst = None, None
@@ -261,17 +260,16 @@ if __name__ == "__main__":
                 ind_cache.reset()
             prev_points = dst_points
             prev_scene = batch["scene"][dst_id]
-            prev_sample = batch["sample"][dst_id]
             if args.flow:
                 prev_flow = scene_flow[dst_id, :, batch["upsample"][dst_id]].T
             else:
                 prev_flow = None
 
             if ind_src is not None and src_id not in predictions:
-                predictions[src_id] = src_pred.cpu().numpy()
+                predictions[src_id] = src_pred.cpu().numpy().squeeze(1)
                 instances[src_id] = ind_src.cpu().numpy()
             if ind_dst is not None:
-                predictions[dst_id] = dst_pred.cpu().numpy()
+                predictions[dst_id] = dst_pred.cpu().numpy().squeeze(1)
                 instances[dst_id] = ind_dst.cpu().numpy()
 
         # get ground truth and update evaluation
