@@ -4,8 +4,8 @@ import numpy as np
 from .pc_dataset import PCDataset
 
 # For normalizing intensities
-MEAN_INT = 0.380899
-STD_INT = 0.174439
+MEAN_INT = 0.391358
+STD_INT = 0.151813
 
 
 class PoneSemSeg(PCDataset):

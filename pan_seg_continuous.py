@@ -64,7 +64,7 @@ class PanSegmenter:
         )
 
         # Load pretrained model
-        ckpt = torch.load(args.pretrained_ckpt, map_location="cpu")
+        ckpt = torch.load(args.pretrained_ckpt, map_location="cpu", weights_only=True)
         ckpt = ckpt["net"]
         new_ckpt = {}
         for k in ckpt.keys():
@@ -106,13 +106,14 @@ class PanSegmenter:
         times.append(time.time())
 
         # get semantic class prediction
-        with torch.no_grad():
+        with torch.inference_mode():
             out, tokens = self.model(*net_inputs)
+        out = out[0].argmax(dim=0)
         times.append(time.time())
 
         # upsample to original resolution
         data["upsample"] = data["upsample"][0].to(self.device)
-        out_upsample = out[0, :, data["upsample"]].T
+        out_upsample = out[data["upsample"]]
         times.append(time.time())
 
         # get instance prediction
@@ -123,7 +124,7 @@ class PanSegmenter:
         src_points_ego = transform_pointcloud(src_points, data["ego"][0].to(self.device))
 
         # get semantic class
-        src_pred = out_upsample.argmax(dim=1).unsqueeze(1)
+        src_pred = out_upsample.unsqueeze(1)
 
         # clustering
         src_points = torch.cat((src_points, src_pred), axis=1)
@@ -151,16 +152,6 @@ class PanSegmenter:
         self.prev_scene = data["scene"][0]
         times.append(time.time())
 
-        # save segmentation files
-        if args.save_path is not None:
-            save_data(
-                args.save_path,
-                data["scene"][0]["name"],
-                data["filename"][0],
-                src_pred.cpu().numpy(),
-                ind_src.cpu().numpy(),
-            )
-
         if args.verbose:
             print(
                 f"Total time: {times[5] - times[0]:.2f} s\n"
@@ -169,6 +160,16 @@ class PanSegmenter:
                 f"Upsample: {times[3] - times[2]:.2f} | "
                 f"InsSeg data prep: {times[4] - times[3]:.2f} | "
                 f"Instance segmentation: {times[5] - times[4]:.2f} | "
+            )
+
+        # save segmentation files
+        if args.save_path is not None:
+            save_data(
+                args.save_path,
+                data["scene"][0]["name"],
+                data["filename"][0],
+                src_pred.cpu().numpy().squeeze(),
+                ind_src.cpu().numpy(),
             )
 
 

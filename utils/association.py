@@ -224,7 +224,10 @@ def long_association(
 
         # If no clusters are found in t2, assign ids to t1
         if clusters_t2.numel() == 0:
-            life_mask = torch.tensor([prev_insts[k].life == config["association"]["life"] - 1 for k in prev_insts_keys], device=centers_t1.device)
+            life_mask = torch.tensor(
+                [prev_insts[k].life == config["association"]["life"] - 1 for k in prev_insts_keys],
+                device=centers_t1.device,
+            )
             if life_mask.any():
                 dists = torch.cdist(centers_t1_o, centers_t1[life_mask], p=2)
                 flow_dist = torch.norm(flow_t1, dim=1)
