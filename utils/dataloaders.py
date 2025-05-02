@@ -42,12 +42,14 @@ def get_datasets(config: dict, args: argparse.Namespace) -> torch.utils.data.Dat
 def get_dataloader(
     dataset: torch.utils.data.Dataset, args: argparse.Namespace
 ) -> torch.utils.data.DataLoader:
+    pin_memory = torch.cuda.is_available()
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True,
+        pin_memory=pin_memory,
         sampler=None,
         drop_last=not args.eval and not args.test,
         collate_fn=Collate(),
