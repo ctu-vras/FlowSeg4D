@@ -25,9 +25,7 @@ def parse_args():
     parser.add_argument(
         "--savedir", type=str, default=None, help="Path to output directory"
     )
-    parser.add_argument(
-        "--dataset", type=str, default="nuscenes", help="Dataset name"
-    )
+    parser.add_argument("--dataset", type=str, default="nuscenes", help="Dataset name")
     parser.add_argument(
         "--restart", type=int, default=None, help="Restart from specified scene number"
     )
@@ -35,34 +33,50 @@ def parse_args():
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
     )
     parser.add_argument(
-        "--frame", default=0, type=int, help="Frame number to start from, only valid for semantic kitti"
+        "--frame",
+        default=0,
+        type=int,
+        help="Frame number to start from, only valid for semantic kitti",
     )
 
     return parser.parse_args()
 
 
 def get_ego_motion_nuscenes(nusc, sample):
-    scene = nusc.get('scene', sample['scene_token'])
-    ref_sample = nusc.get('sample', scene['first_sample_token'])
+    scene = nusc.get("scene", sample["scene_token"])
+    ref_sample = nusc.get("sample", scene["first_sample_token"])
 
-    ref_sd_rec = nusc.get('sample_data', ref_sample['data']['LIDAR_TOP'])
-    ref_pose_rec = nusc.get('ego_pose', ref_sd_rec['ego_pose_token'])
-    ref_cs_rec = nusc.get('calibrated_sensor', ref_sd_rec['calibrated_sensor_token'])
+    ref_sd_rec = nusc.get("sample_data", ref_sample["data"]["LIDAR_TOP"])
+    ref_pose_rec = nusc.get("ego_pose", ref_sd_rec["ego_pose_token"])
+    ref_cs_rec = nusc.get("calibrated_sensor", ref_sd_rec["calibrated_sensor_token"])
 
-    ref_from_car = transform_matrix(ref_cs_rec['translation'], Quaternion(ref_cs_rec['rotation']), inverse=True)
-    car_from_global = transform_matrix(ref_pose_rec['translation'], Quaternion(ref_pose_rec['rotation']),
-                                       inverse=True)
+    ref_from_car = transform_matrix(
+        ref_cs_rec["translation"], Quaternion(ref_cs_rec["rotation"]), inverse=True
+    )
+    car_from_global = transform_matrix(
+        ref_pose_rec["translation"], Quaternion(ref_pose_rec["rotation"]), inverse=True
+    )
 
-    cur_sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
-    current_pose_rec = nusc.get('ego_pose', cur_sd_rec['ego_pose_token'])
-    current_cs_rec = nusc.get('calibrated_sensor', cur_sd_rec['calibrated_sensor_token'])
+    cur_sd_rec = nusc.get("sample_data", sample["data"]["LIDAR_TOP"])
+    current_pose_rec = nusc.get("ego_pose", cur_sd_rec["ego_pose_token"])
+    current_cs_rec = nusc.get(
+        "calibrated_sensor", cur_sd_rec["calibrated_sensor_token"]
+    )
 
-    global_from_car = transform_matrix(current_pose_rec['translation'],
-                                       Quaternion(current_pose_rec['rotation']), inverse=False)
-    car_from_current = transform_matrix(current_cs_rec['translation'], Quaternion(current_cs_rec['rotation']),
-                                        inverse=False)
+    global_from_car = transform_matrix(
+        current_pose_rec["translation"],
+        Quaternion(current_pose_rec["rotation"]),
+        inverse=False,
+    )
+    car_from_current = transform_matrix(
+        current_cs_rec["translation"],
+        Quaternion(current_cs_rec["rotation"]),
+        inverse=False,
+    )
 
-    ego_motion = reduce(np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current])
+    ego_motion = reduce(
+        np.dot, [ref_from_car, car_from_global, global_from_car, car_from_current]
+    )
 
     return ego_motion
 
@@ -93,10 +107,18 @@ if __name__ == "__main__":
             src = nusc.get("sample", scene["first_sample_token"])
             dst = nusc.get("sample", src["next"])
             while True:
-                src_points = np.fromfile(nusc.get_sample_data(src["data"]["LIDAR_TOP"])[0], dtype=np.float32)
-                src_points = torch.from_numpy(src_points.reshape(-1, 5)[:, :3]).to(device)
-                dst_points = np.fromfile(nusc.get_sample_data(dst["data"]["LIDAR_TOP"])[0], dtype=np.float32)
-                dst_points = torch.from_numpy(dst_points.reshape(-1, 5)[:, :3]).to(device)
+                src_points = np.fromfile(
+                    nusc.get_sample_data(src["data"]["LIDAR_TOP"])[0], dtype=np.float32
+                )
+                src_points = torch.from_numpy(src_points.reshape(-1, 5)[:, :3]).to(
+                    device
+                )
+                dst_points = np.fromfile(
+                    nusc.get_sample_data(dst["data"]["LIDAR_TOP"])[0], dtype=np.float32
+                )
+                dst_points = torch.from_numpy(dst_points.reshape(-1, 5)[:, :3]).to(
+                    device
+                )
 
                 src_ego = get_ego_motion_nuscenes(nusc, src)
                 dst_ego = get_ego_motion_nuscenes(nusc, dst)
@@ -104,13 +126,29 @@ if __name__ == "__main__":
                 src_points = transform_pointcloud(src_points, src_ego)
                 dst_points = transform_pointcloud(dst_points, dst_ego)
 
-                panoptic_path = nusc.get("panoptic", src["data"]["LIDAR_TOP"])["filename"]
-                src_labels = np.load(f"{args.dataroot}/{panoptic_path}", allow_pickle=True)["data"]
-                src_labels = torch.from_numpy(src_labels.astype(np.int32) // 1000).to(device).long()
+                panoptic_path = nusc.get("panoptic", src["data"]["LIDAR_TOP"])[
+                    "filename"
+                ]
+                src_labels = np.load(
+                    f"{args.dataroot}/{panoptic_path}", allow_pickle=True
+                )["data"]
+                src_labels = (
+                    torch.from_numpy(src_labels.astype(np.int32) // 1000)
+                    .to(device)
+                    .long()
+                )
 
-                panoptic_path = nusc.get("panoptic", dst["data"]["LIDAR_TOP"])["filename"]
-                dst_labels = np.load(f"{args.dataroot}/{panoptic_path}", allow_pickle=True)["data"]
-                dst_labels = torch.from_numpy(dst_labels.astype(np.int32) // 1000).to(device).long()
+                panoptic_path = nusc.get("panoptic", dst["data"]["LIDAR_TOP"])[
+                    "filename"
+                ]
+                dst_labels = np.load(
+                    f"{args.dataroot}/{panoptic_path}", allow_pickle=True
+                )["data"]
+                dst_labels = (
+                    torch.from_numpy(dst_labels.astype(np.int32) // 1000)
+                    .to(device)
+                    .long()
+                )
 
                 flow = flow_estimation_lif(
                     config=config,
@@ -153,10 +191,24 @@ if __name__ == "__main__":
                     continue
 
                 # Load source and destination point clouds
-                src_points = np.fromfile(os.path.join(scene_dir, "velodyne", f"{i:06d}.bin"), dtype=np.float32)
-                src_points = torch.from_numpy(src_points.reshape(-1, 4)[:, :3]).to(device).double()
-                dst_points = np.fromfile(os.path.join(scene_dir, "velodyne", f"{i+1:06d}.bin"), dtype=np.float32)
-                dst_points = torch.from_numpy(dst_points.reshape(-1, 4)[:, :3]).to(device).double()
+                src_points = np.fromfile(
+                    os.path.join(scene_dir, "velodyne", f"{i:06d}.bin"),
+                    dtype=np.float32,
+                )
+                src_points = (
+                    torch.from_numpy(src_points.reshape(-1, 4)[:, :3])
+                    .to(device)
+                    .double()
+                )
+                dst_points = np.fromfile(
+                    os.path.join(scene_dir, "velodyne", f"{i+1:06d}.bin"),
+                    dtype=np.float32,
+                )
+                dst_points = (
+                    torch.from_numpy(dst_points.reshape(-1, 4)[:, :3])
+                    .to(device)
+                    .double()
+                )
 
                 src_ego = pose_o @ poses_h[i]
                 dst_ego = pose_o @ poses_h[i + 1]
@@ -170,13 +222,17 @@ if __name__ == "__main__":
                     dtype=np.uint32,
                 )
                 src_labels = src_labels & 0xFFFF
-                src_labels = torch.from_numpy(src_labels.astype(np.int32)).to(device).long()
+                src_labels = (
+                    torch.from_numpy(src_labels.astype(np.int32)).to(device).long()
+                )
                 dst_labels = np.fromfile(
                     os.path.join(scene_dir, "labels", f"{i+1:06d}.label"),
                     dtype=np.uint32,
                 )
                 dst_labels = dst_labels & 0xFFFF
-                dst_labels = torch.from_numpy(dst_labels.astype(np.int32)).to(device).long()
+                dst_labels = (
+                    torch.from_numpy(dst_labels.astype(np.int32)).to(device).long()
+                )
 
                 flow = flow_estimation_lif(
                     config=config,

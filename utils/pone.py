@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--intensity",
         action="store_true",
-        help="Calculate standard deviation and mean of intensity"
+        help="Calculate standard deviation and mean of intensity",
     )
 
     return parser.parse_args()
@@ -44,8 +44,15 @@ def process_raw_dataset(args):
                 raise FileNotFoundError(f"Split directory {split_dir} does not exist")
             for scene_dir in tqdm.tqdm(sorted(os.listdir(split_dir))):
                 if os.path.isdir(os.path.join(split_dir, scene_dir)):
-                    process_scene(args, os.path.join(split_dir, scene_dir), list_frame[split_id], data_split[split_id])
-        print(f"Processing completed for {data_split[split_id]} split found {len(list_frame[split_id])} frames\n")
+                    process_scene(
+                        args,
+                        os.path.join(split_dir, scene_dir),
+                        list_frame[split_id],
+                        data_split[split_id],
+                    )
+        print(
+            f"Processing completed for {data_split[split_id]} split found {len(list_frame[split_id])} frames\n"
+        )
 
     # Save the list_frame to a file
     np.savez(
@@ -55,9 +62,12 @@ def process_raw_dataset(args):
         test=list_frame[2],
     )
 
+
 def process_scene(args, scene_dir, list_frame, split_name):
     scene_name = scene_dir.split("/")[-1]
-    scene_data = np.load(os.path.join(scene_dir, (scene_name + "_PCD.npz")), allow_pickle=True)
+    scene_data = np.load(
+        os.path.join(scene_dir, (scene_name + "_PCD.npz")), allow_pickle=True
+    )
     scan_data = scene_data["scan_list"]
     odom_data = scene_data["odom_list"]
 
@@ -66,7 +76,9 @@ def process_scene(args, scene_dir, list_frame, split_name):
         odom = odom_data[i]
 
         # Convert the scan data to a point cloud format
-        pcd = np.concatenate([scan["x"], scan["z"].reshape(-1, 1), scan["i"].reshape(-1, 1)], axis=1)
+        pcd = np.concatenate(
+            [scan["x"], scan["z"].reshape(-1, 1), scan["i"].reshape(-1, 1)], axis=1
+        )
 
         # Save the scan and odom data
         filename = scene_name + f"_{i:04d}.npz"
@@ -81,6 +93,7 @@ def process_scene(args, scene_dir, list_frame, split_name):
 
         # Append the frame to the list
         list_frame.append((os.path.join(split_name, filename), i, filename))
+
 
 def calculate_intensity(args):
     if not args.dataset.lower() == "pone":
@@ -103,15 +116,22 @@ def calculate_intensity(args):
                 raise FileNotFoundError(f"Split directory {split_dir} does not exist")
             for scene_dir in tqdm.tqdm(sorted(os.listdir(split_dir))):
                 if os.path.isdir(os.path.join(split_dir, scene_dir)):
-                    process_scene_intensity(os.path.join(split_dir, scene_dir), intensity_values)
+                    process_scene_intensity(
+                        os.path.join(split_dir, scene_dir), intensity_values
+                    )
+
 
 def process_scene_intensity(scene_dir, intensity_values):
     scene_name = scene_dir.split("/")[-1]
-    scene_data = np.load(os.path.join(scene_dir, (scene_name + "_PCD.npz")), allow_pickle=True)
+    scene_data = np.load(
+        os.path.join(scene_dir, (scene_name + "_PCD.npz")), allow_pickle=True
+    )
     scan_data = scene_data["scan_list"]
 
     for i in range(scan_data.shape[0]):
-        intensity_values = np.concatenate([intensity_values, scan_data[i]["i"].reshape(-1)])
+        intensity_values = np.concatenate(
+            [intensity_values, scan_data[i]["i"].reshape(-1)]
+        )
 
     # Calculate mean and standard deviation
     mean_intensity = np.mean(intensity_values)

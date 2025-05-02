@@ -62,10 +62,16 @@ def parse_args():
         help="Use ground truth labels for semantic segmentation",
     )
     parser.add_argument(
-        "--eval", action="store_true", default=False, help="Run validation split of dataset",
+        "--eval",
+        action="store_true",
+        default=False,
+        help="Run validation split of dataset",
     )
     parser.add_argument(
-        "--test", action="store_true", default=False, help="Run testing split of dataset",
+        "--test",
+        action="store_true",
+        default=False,
+        help="Run testing split of dataset",
     )
     parser.add_argument(
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
@@ -74,10 +80,21 @@ def parse_args():
         "--save_path", type=str, default=None, help="Path to save segmentation files"
     )
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
-    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose debug messages")
-    parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
-    parser.add_argument("--flow", action="store_true", default=False, help="Use flow estimation")
-    parser.add_argument("--short", action="store_true", default=False, help="Do not use long association")
+    parser.add_argument(
+        "--verbose", action="store_true", default=False, help="Verbose debug messages"
+    )
+    parser.add_argument(
+        "--clustering", type=str, default=None, help="Clustering method"
+    )
+    parser.add_argument(
+        "--flow", action="store_true", default=False, help="Use flow estimation"
+    )
+    parser.add_argument(
+        "--short",
+        action="store_true",
+        default=False,
+        help="Do not use long association",
+    )
 
     return parser.parse_args()
 
@@ -88,7 +105,9 @@ if __name__ == "__main__":
     if args.batch_size < 1:
         raise ValueError("Batch size must be greater than 0")
     elif args.batch_size == 1:
-        raise ValueError("Batch size of 1 is not supported, for batch size of 1 use pan_seg_continuous.py")
+        raise ValueError(
+            "Batch size of 1 is not supported, for batch size of 1 use pan_seg_continuous.py"
+        )
 
     # Load config files
     config_panseg = load_model_config("configs/config.yaml")
@@ -116,10 +135,14 @@ if __name__ == "__main__":
 
     # Adding classification layer
     model.classif = torch.nn.Conv1d(
-        config_model["waffleiron"]["nb_channels"], config_model["waffleiron"]["pretrain_dim"], 1
+        config_model["waffleiron"]["nb_channels"],
+        config_model["waffleiron"]["pretrain_dim"],
+        1,
     )
     classif = torch.nn.Conv1d(
-        config_model["waffleiron"]["nb_channels"], config_model["classif"]["nb_class"], 1
+        config_model["waffleiron"]["nb_channels"],
+        config_model["classif"]["nb_class"],
+        1,
     )
     torch.nn.init.constant_(classif.bias, 0)
     torch.nn.init.constant_(classif.weight, 0)
@@ -162,7 +185,9 @@ if __name__ == "__main__":
     prev_points = None
     clusterer = Clusterer(config_panseg)
     ind_cache = Obj_cache(config_model["classif"]["nb_class"])
-    evaluator = EvalPQ4D(config_model["classif"]["nb_class"], config_panseg["ignore_classes"])
+    evaluator = EvalPQ4D(
+        config_model["classif"]["nb_class"], config_panseg["ignore_classes"]
+    )
 
     # For SemanticKITTI initialize inverse mapping
     if args.dataset == "semantic_kitti":
@@ -209,10 +234,14 @@ if __name__ == "__main__":
                 flow = scene_flow[src_id, :, batch["upsample"][src_id]].T
             else:
                 flow = None
-            
+
             # ego motion compensation
-            src_points_ego = transform_pointcloud(src_points, batch["ego"][src_id].to(device))
-            dst_points_ego = transform_pointcloud(dst_points, batch["ego"][dst_id].to(device))
+            src_points_ego = transform_pointcloud(
+                src_points, batch["ego"][src_id].to(device)
+            )
+            dst_points_ego = transform_pointcloud(
+                dst_points, batch["ego"][dst_id].to(device)
+            )
 
             # get semantic class
             if not args.use_gt:
@@ -221,7 +250,9 @@ if __name__ == "__main__":
             else:
                 e_idx = s_idx + batch["upsample"][src_id].shape[0]
                 src_pred = labels[s_idx:e_idx].to(device)
-                dst_pred = labels[e_idx:e_idx + batch["upsample"][dst_id].shape[0]].to(device)
+                dst_pred = labels[
+                    e_idx : e_idx + batch["upsample"][dst_id].shape[0]
+                ].to(device)
                 s_idx = e_idx
 
             # clustering
@@ -232,17 +263,37 @@ if __name__ == "__main__":
             dst_labels = clusterer.get_semantic_clustering(dst_points)
 
             # create data - ego compensated xyz + features + semantic class + cluster id
-            src_points = torch.cat((src_points_ego, src_features, src_pred, src_labels.unsqueeze(1)), axis=1)
-            dst_points = torch.cat((dst_points_ego, dst_features, dst_pred, dst_labels.unsqueeze(1)), axis=1)
+            src_points = torch.cat(
+                (src_points_ego, src_features, src_pred, src_labels.unsqueeze(1)),
+                axis=1,
+            )
+            dst_points = torch.cat(
+                (dst_points_ego, dst_features, dst_pred, dst_labels.unsqueeze(1)),
+                axis=1,
+            )
 
             # associate -- set temporally consistent instance id
             ind_src, ind_dst = None, None
             if prev_ind is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
                     if config_panseg["association"]["use_long"]:
-                        _, ind_src = long_association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
+                        _, ind_src = long_association(
+                            prev_points,
+                            src_points,
+                            config_panseg,
+                            prev_ind,
+                            ind_cache,
+                            prev_flow,
+                        )
                     else:
-                        _, ind_src = association(prev_points, src_points, config_panseg, prev_ind, ind_cache, prev_flow)
+                        _, ind_src = association(
+                            prev_points,
+                            src_points,
+                            config_panseg,
+                            prev_ind,
+                            ind_cache,
+                            prev_flow,
+                        )
                     ind_cache.max_id = int(max(prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
@@ -250,9 +301,13 @@ if __name__ == "__main__":
                     ind_cache.reset()
             if batch["scene"][src_id]["token"] == batch["scene"][dst_id]["token"]:
                 if config_panseg["association"]["use_long"]:
-                    ind_src, ind_dst = long_association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
+                    ind_src, ind_dst = long_association(
+                        src_points, dst_points, config_panseg, prev_ind, ind_cache, flow
+                    )
                 else:
-                    ind_src, ind_dst = association(src_points, dst_points, config_panseg, prev_ind, ind_cache, flow)
+                    ind_src, ind_dst = association(
+                        src_points, dst_points, config_panseg, prev_ind, ind_cache, flow
+                    )
                 ind_cache.max_id = int(max(ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
             else:
@@ -304,7 +359,7 @@ if __name__ == "__main__":
                     instances[batch_id],
                 )
 
-        if (i+1) % 100 == 0 and args.verbose:
+        if (i + 1) % 100 == 0 and args.verbose:
             print("\n==========================")
             print(f"Batch {i+1} done - {(i+1) * args.batch_size} samples processed")
             LSTQ, AQ_ovr, _, _, _, _, iou_mean, _, _ = evaluator.compute()
@@ -316,7 +371,11 @@ if __name__ == "__main__":
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
-    with open(time.strftime('results/Log_%Y-%m-%d_%H-%M-%S', time.gmtime()), "w") as fh:
+    with open(time.strftime("results/Log_%Y-%m-%d_%H-%M-%S", time.gmtime()), "w") as fh:
         fh.write(f"Config:\n{config_msg}\n\n")
-        fh.write(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n")
-        fh.write(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}\n")
+        fh.write(
+            f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n"
+        )
+        fh.write(
+            f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}\n"
+        )

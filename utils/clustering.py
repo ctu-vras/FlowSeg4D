@@ -11,8 +11,17 @@ class Clusterer:
         self.config = config
         self.clusterer = None
         if config["clustering"]["clustering_method"] == "alpine":
-            BBOX = config["alpine"]["BBOX_WEB"] if config["alpine"]["bbox_source"] == "web" else config["alpine"]["BBOX_DATASET"]
-            self.clusterer = Alpine(config["fore_classes"], BBOX, k=config["alpine"]["neighbours"], margin=config["alpine"]["margin"])
+            BBOX = (
+                config["alpine"]["BBOX_WEB"]
+                if config["alpine"]["bbox_source"] == "web"
+                else config["alpine"]["BBOX_DATASET"]
+            )
+            self.clusterer = Alpine(
+                config["fore_classes"],
+                BBOX,
+                k=config["alpine"]["neighbours"],
+                margin=config["alpine"]["margin"],
+            )
         elif config["clustering"]["clustering_method"] == "hdbscan":
             self.clusterer = hdbscan.HDBSCAN(
                 algorithm="best",
@@ -20,18 +29,17 @@ class Clusterer:
                 gen_min_span_tree=True,
                 metric="euclidean",
                 min_cluster_size=config["clustering"]["min_cluster_size"],
-                min_samples=None
-                )
+                min_samples=None,
+            )
         elif config["clustering"]["clustering_method"] == "dbscan":
             self.clusterer = DBSCAN(
                 eps=config["clustering"]["epsilon"],
-                min_samples=config["clustering"]["min_cluster_size"]
+                min_samples=config["clustering"]["min_cluster_size"],
             )
         else:
             raise ValueError(
                 f"Unsupported clustering method: {self.config['clustering_method']}"
             )
-
 
     def get_semantic_clustering(self, points: torch.Tensor) -> torch.Tensor:
         """
@@ -51,7 +59,9 @@ class Clusterer:
             labels = self.clusterer.fit_predict(points_np[:, :3], points_np[:, -1]) - 1
         else:
             class_ids, class_counts = np.unique(points_np[:, -1], return_counts=True)
-            valid_classes = class_ids[class_counts >= self.config["clustering"]["min_cluster_size"]]
+            valid_classes = class_ids[
+                class_counts >= self.config["clustering"]["min_cluster_size"]
+            ]
 
             cluster_id = 0
             for class_id in valid_classes:
@@ -66,7 +76,9 @@ class Clusterer:
 
                 unique_labels = np.unique(class_labels)
                 cluster_id += (
-                    (len(unique_labels) - 1) if -1 in unique_labels else len(unique_labels)
+                    (len(unique_labels) - 1)
+                    if -1 in unique_labels
+                    else len(unique_labels)
                 )
 
         # keep only the top clusters

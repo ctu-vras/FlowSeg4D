@@ -215,4 +215,3 @@ if __name__ == "__main__":
     np.testing.assert_equal(AQ_r, 1.0)
     np.testing.assert_equal(iou, [0, 0.5, 0.5])
     np.testing.assert_equal(iou_mean, 0.5)
-

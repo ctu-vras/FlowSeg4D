@@ -26,7 +26,9 @@ class PanSegmenter:
         # Load config files
         config_panseg = load_model_config("configs/config.yaml")
         config_pretrain = load_model_config(args.config_pretrain)
-        config_model = load_model_config(config_panseg[args.dataset]["config_downstream"])
+        config_model = load_model_config(
+            config_panseg[args.dataset]["config_downstream"]
+        )
 
         process_configs(args, config_panseg, config_pretrain, config_model)
         config_msg = print_config_cont(args, config_panseg)
@@ -51,10 +53,14 @@ class PanSegmenter:
 
         # Adding classification layer
         self.model.classif = torch.nn.Conv1d(
-            config_model["waffleiron"]["nb_channels"], config_model["waffleiron"]["pretrain_dim"], 1
+            config_model["waffleiron"]["nb_channels"],
+            config_model["waffleiron"]["pretrain_dim"],
+            1,
         )
         classif = torch.nn.Conv1d(
-            config_model["waffleiron"]["nb_channels"], config_model["classif"]["nb_class"], 1
+            config_model["waffleiron"]["nb_channels"],
+            config_model["classif"]["nb_class"],
+            1,
         )
         torch.nn.init.constant_(classif.bias, 0)
         torch.nn.init.constant_(classif.weight, 0)
@@ -121,7 +127,9 @@ class PanSegmenter:
         src_features = tokens[0, :, data["upsample"]].T
 
         # ego motion compensation
-        src_points_ego = transform_pointcloud(src_points, data["ego"][0].to(self.device))
+        src_points_ego = transform_pointcloud(
+            src_points, data["ego"][0].to(self.device)
+        )
 
         # get semantic class
         src_pred = out_upsample.unsqueeze(1)
@@ -131,20 +139,39 @@ class PanSegmenter:
         src_labels = self.clusterer.get_semantic_clustering(src_points)
 
         # create data - ego compensated xyz + features + semantic class + cluster id
-        src_points = torch.cat((src_points_ego, src_features, src_pred, src_labels.unsqueeze(1)), axis=1)
+        src_points = torch.cat(
+            (src_points_ego, src_features, src_pred, src_labels.unsqueeze(1)), axis=1
+        )
         times.append(time.time())
 
         # associate -- set temporally consistent instance id
         ind_src = None
-        if self.prev_scene is None or not self.prev_scene["token"] == data["scene"][0]["token"]:
+        if (
+            self.prev_scene is None
+            or not self.prev_scene["token"] == data["scene"][0]["token"]
+        ):
             self.prev_ind = None
             self.obj_cache.reset()
             self.prev_points = torch.zeros_like(src_points)
 
         if self.config["association"]["use_long"]:
-            _, ind_src = long_association(self.prev_points, src_points, self.config, self.prev_ind, self.obj_cache, None)
+            _, ind_src = long_association(
+                self.prev_points,
+                src_points,
+                self.config,
+                self.prev_ind,
+                self.obj_cache,
+                None,
+            )
         else:
-            _, ind_src = association(self.prev_points, src_points, self.config, self.prev_ind, self.obj_cache, None)
+            _, ind_src = association(
+                self.prev_points,
+                src_points,
+                self.config,
+                self.prev_ind,
+                self.obj_cache,
+                None,
+            )
         self.prev_ind = ind_src
         self.obj_cache.max_id = int(max(self.prev_ind.max(), ind_src.max()))
 
@@ -213,9 +240,18 @@ def parse_args():
     parser.add_argument(
         "--save_path", type=str, default=None, help="Path to save segmentation files"
     )
-    parser.add_argument("--clustering", type=str, default=None, help="Clustering method")
-    parser.add_argument("--short", action="store_true", default=False, help="Do not use long association")
-    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose mode")
+    parser.add_argument(
+        "--clustering", type=str, default=None, help="Clustering method"
+    )
+    parser.add_argument(
+        "--short",
+        action="store_true",
+        default=False,
+        help="Do not use long association",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", default=False, help="Verbose mode"
+    )
 
     return parser.parse_args()
 

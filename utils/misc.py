@@ -13,6 +13,7 @@ import numpy as np
 # IO functions
 ###############################
 
+
 def load_model_config(file: str) -> dict:
     """
     Load the model configuration from a YAML file.
@@ -25,8 +26,13 @@ def load_model_config(file: str) -> dict:
         config = yaml.safe_load(f)
     return config
 
+
 def save_data(
-        save_path: str, scene_name: str, filename: str, semantic: torch.Tensor, instance: torch.Tensor
+    save_path: str,
+    scene_name: str,
+    filename: str,
+    semantic: torch.Tensor,
+    instance: torch.Tensor,
 ) -> None:
     """
     Save the data to a file.
@@ -47,9 +53,11 @@ def save_data(
 
     save_data.tofile(save_file)
 
+
 ###############################
 # Config functions
 ###############################
+
 
 def print_config(args: argparse.Namespace, config: dict) -> str:
     """
@@ -78,7 +86,11 @@ def print_config(args: argparse.Namespace, config: dict) -> str:
     msg += f"Use flow: {args.flow}\n"
     msg += f"Use gt: {args.use_gt}\n"
 
-    clustering_method = config["clustering"]["clustering_method"] if args.clustering is None else args.clustering
+    clustering_method = (
+        config["clustering"]["clustering_method"]
+        if args.clustering is None
+        else args.clustering
+    )
     msg += f"Clustering: {clustering_method}\n"
     msg += f"  max number of clusters: {config['clustering']['num_clusters']}\n"
     if clustering_method == "hdbscan":
@@ -95,7 +107,7 @@ def print_config(args: argparse.Namespace, config: dict) -> str:
 
     msg += f"Association:\n"
     msg += f"  max distance: {config['association']['max_dist']}\n"
-    if not args.short or (args.short and config['association']['use_feat']):
+    if not args.short or (args.short and config["association"]["use_feat"]):
         msg += f"  max feature distance: {config['association']['max_feat']}\n"
     if not args.short:
         msg += f"  life: {config['association']['life']}\n"
@@ -109,6 +121,7 @@ def print_config(args: argparse.Namespace, config: dict) -> str:
     print(msg)
     return msg
 
+
 def print_config_cont(args: argparse.Namespace, config: dict) -> str:
     """
     Print the configuration settings for the continuous run of panoptic
@@ -121,7 +134,11 @@ def print_config_cont(args: argparse.Namespace, config: dict) -> str:
     """
     msg = ""
 
-    clustering_method = config["clustering"]["clustering_method"] if args.clustering is None else args.clustering
+    clustering_method = (
+        config["clustering"]["clustering_method"]
+        if args.clustering is None
+        else args.clustering
+    )
     msg += f"Clustering: {clustering_method}\n"
     msg += f"  max number of clusters: {config['clustering']['num_clusters']}\n"
     if clustering_method == "hdbscan":
@@ -138,7 +155,7 @@ def print_config_cont(args: argparse.Namespace, config: dict) -> str:
 
     msg += f"Association:\n"
     msg += f"  max distance: {config['association']['max_dist']}\n"
-    if not args.short or (args.short and config['association']['use_feat']):
+    if not args.short or (args.short and config["association"]["use_feat"]):
         msg += f"  max feature distance: {config['association']['max_feat']}\n"
     if not args.short:
         msg += f"  life: {config['association']['life']}\n"
@@ -159,8 +176,12 @@ def print_config_cont(args: argparse.Namespace, config: dict) -> str:
     print(msg)
     return msg
 
+
 def process_configs(
-        args: argparse.Namespace, config_panseg: dict, config_pretrain: dict, config_model: dict
+    args: argparse.Namespace,
+    config_panseg: dict,
+    config_pretrain: dict,
+    config_model: dict,
 ) -> None:
     """
     Process the config files and merge different configurations.
@@ -177,7 +198,9 @@ def process_configs(
         config_panseg["clustering"]["clustering_method"] = args.clustering.lower()
     if config_panseg["clustering"]["clustering_method"] == "alpine":
         config_panseg["alpine"]["BBOX_WEB"] = config_panseg[args.dataset]["bbox_web"]
-        config_panseg["alpine"]["BBOX_DATASET"] = config_panseg[args.dataset]["bbox_dataset"]
+        config_panseg["alpine"]["BBOX_DATASET"] = config_panseg[args.dataset][
+            "bbox_dataset"
+        ]
     if args.short:
         config_panseg["association"]["use_long"] = False
     else:
@@ -189,28 +212,40 @@ def process_configs(
     config_model["embedding"]["input_feat"] = config_pretrain["point_backbone"][
         "input_features"
     ]
-    config_model["embedding"]["size_input"] = config_pretrain["point_backbone"]["size_input"]
+    config_model["embedding"]["size_input"] = config_pretrain["point_backbone"][
+        "size_input"
+    ]
     config_model["embedding"]["neighbors"] = config_pretrain["point_backbone"][
         "num_neighbors"
     ]
-    config_model["embedding"]["voxel_size"] = config_pretrain["point_backbone"]["voxel_size"]
+    config_model["embedding"]["voxel_size"] = config_pretrain["point_backbone"][
+        "voxel_size"
+    ]
 
     # Backbone
     config_model["waffleiron"]["depth"] = config_pretrain["point_backbone"]["depth"]
     config_model["waffleiron"]["num_neighbors"] = config_pretrain["point_backbone"][
         "num_neighbors"
     ]
-    config_model["waffleiron"]["dim_proj"] = config_pretrain["point_backbone"]["dim_proj"]
+    config_model["waffleiron"]["dim_proj"] = config_pretrain["point_backbone"][
+        "dim_proj"
+    ]
     config_model["waffleiron"]["nb_channels"] = config_pretrain["point_backbone"][
         "nb_channels"
     ]
-    config_model["waffleiron"]["pretrain_dim"] = config_pretrain["point_backbone"]["nb_class"]
-    config_model["waffleiron"]["layernorm"] = config_pretrain["point_backbone"]["layernorm"]
+    config_model["waffleiron"]["pretrain_dim"] = config_pretrain["point_backbone"][
+        "nb_class"
+    ]
+    config_model["waffleiron"]["layernorm"] = config_pretrain["point_backbone"][
+        "layernorm"
+    ]
 
     # For datasets which need larger FOV for finetuning...
     if config_model["dataloader"].get("new_grid_shape") is not None:
         # ... overwrite config used at pretraining
-        config_model["waffleiron"]["grids_size"] = config_model["dataloader"]["new_grid_shape"]
+        config_model["waffleiron"]["grids_size"] = config_model["dataloader"][
+            "new_grid_shape"
+        ]
     else:
         # ... otherwise keep default value
         config_model["waffleiron"]["grids_size"] = config_pretrain["point_backbone"][
@@ -221,9 +256,11 @@ def process_configs(
     else:
         config_model["waffleiron"]["fov_xyz"] = config_pretrain["point_backbone"]["fov"]
 
+
 ###############################
 # Transformations
 ###############################
+
 
 def transform_pointcloud(
     points: torch.Tensor, transform_matrix: Union[torch.Tensor, np.ndarray]
@@ -252,6 +289,7 @@ def transform_pointcloud(
     points_tr = torch.mm(transform_matrix, points_tr.T).T
 
     return points_tr[:, :3]
+
 
 def get_centers_for_class(
     points: torch.Tensor,
@@ -285,7 +323,9 @@ def get_centers_for_class(
     if feat is None:
         centers = torch.stack(
             [
-                points[(class_mask) & (points[:, -1] == cluster_id), :3].median(dim=0).values
+                points[(class_mask) & (points[:, -1] == cluster_id), :3]
+                .median(dim=0)
+                .values
                 for cluster_id in clusters
             ]
         )
@@ -293,7 +333,9 @@ def get_centers_for_class(
         if feat.shape[1] == 3:
             centers = torch.stack(
                 [
-                    feat[(class_mask) & (points[:, -1] == cluster_id)].median(dim=0).values
+                    feat[(class_mask) & (points[:, -1] == cluster_id)]
+                    .median(dim=0)
+                    .values
                     for cluster_id in clusters
                 ]
             )
@@ -307,9 +349,11 @@ def get_centers_for_class(
 
     return centers.double(), clusters
 
+
 ###############################
 # Data classes
 ###############################
+
 
 @dataclass
 class Obj_cache:
@@ -339,6 +383,7 @@ class Obj_cache:
                     keys_to_delete.append(key)
             for key in keys_to_delete:
                 self.del_instance(i, key)
+
 
 @dataclass
 class Instance_data:

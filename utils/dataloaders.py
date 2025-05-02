@@ -38,7 +38,10 @@ def get_datasets(config: dict, args: argparse.Namespace) -> torch.utils.data.Dat
 
     return dataset
 
-def get_dataloader(dataset: torch.utils.data.Dataset, args: argparse.Namespace) -> torch.utils.data.DataLoader:
+
+def get_dataloader(
+    dataset: torch.utils.data.Dataset, args: argparse.Namespace
+) -> torch.utils.data.DataLoader:
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=args.batch_size,

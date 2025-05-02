@@ -41,19 +41,16 @@ class PoneSemSeg(PCDataset):
         self.ratio = ratio
         if self.phase == "train":
             self.list_frames = np.load(
-                os.path.join(current_folder, "list_frames_pone.npz"),
-                allow_pickle=True
-            )['train']
+                os.path.join(current_folder, "list_frames_pone.npz"), allow_pickle=True
+            )["train"]
         elif self.phase == "val":
             self.list_frames = np.load(
-                os.path.join(current_folder, "list_frames_pone.npz"),
-                allow_pickle=True
-            )['val']
+                os.path.join(current_folder, "list_frames_pone.npz"), allow_pickle=True
+            )["val"]
         elif self.phase == "test":
             self.list_frames = np.load(
-                os.path.join(current_folder, "list_frames_pone.npz"),
-                allow_pickle=True
-            )['test']
+                os.path.join(current_folder, "list_frames_pone.npz"), allow_pickle=True
+            )["test"]
         else:
             raise ValueError(f"Unknown phase {self.phase}")
 
@@ -63,9 +60,8 @@ class PoneSemSeg(PCDataset):
     def load_pc(self, index):
         # Load point cloud
         pc = np.load(
-            os.path.join(self.rootdir, self.list_frames[index][0]),
-            allow_pickle=True
-        )['pcd']
+            os.path.join(self.rootdir, self.list_frames[index][0]), allow_pickle=True
+        )["pcd"]
 
         # Load segmentation labels
         labels = np.zeros(pc.shape[0], dtype=np.int32)
@@ -78,14 +74,13 @@ class PoneSemSeg(PCDataset):
 
     def get_ego_motion(self, index):
         data = np.load(
-            os.path.join(self.rootdir, self.list_frames[index][0]),
-            allow_pickle=True
-        )['odom']
+            os.path.join(self.rootdir, self.list_frames[index][0]), allow_pickle=True
+        )["odom"]
 
         scene_name = self.list_frames[index][0].split("/")[-1][:-9]
         scene = {"name": scene_name, "token": scene_name}
 
-        return data['transformation'], scene, self.list_frames[index][1]
+        return data["transformation"], scene, self.list_frames[index][1]
 
     def get_panoptic_labels(self, index):
         return None, None

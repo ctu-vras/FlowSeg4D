@@ -30,8 +30,12 @@ def association(
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: The updated indices for points in both sets.
     """
-    indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32, device=points_t1.device)
-    indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32, device=points_t2.device)
+    indices_t1 = torch.zeros(
+        points_t1.shape[0], dtype=torch.int32, device=points_t1.device
+    )
+    indices_t2 = torch.zeros(
+        points_t2.shape[0], dtype=torch.int32, device=points_t2.device
+    )
 
     curr_id = 1 if ind_cache is None else ind_cache.max_id + 1
 
@@ -44,8 +48,12 @@ def association(
         centers_t2, clusters_t2 = get_centers_for_class(points_t2, class_id)
 
         if config["association"]["use_feat"]:
-            features_t1, _ = get_centers_for_class(points_t1, class_id, points_t1[:, 3:-2])
-            features_t2, _ = get_centers_for_class(points_t2, class_id, points_t2[:, 3:-2])
+            features_t1, _ = get_centers_for_class(
+                points_t1, class_id, points_t1[:, 3:-2]
+            )
+            features_t2, _ = get_centers_for_class(
+                points_t2, class_id, points_t2[:, 3:-2]
+            )
 
         # If no clusters are found, continue to the next class
         if clusters_t1.numel() == 0 and clusters_t2.numel() == 0:
@@ -78,9 +86,15 @@ def association(
         cost_dists[cost_dists > config["association"]["max_dist"]] = 1e8
 
         if config["association"]["use_feat"]:
-            features_t1_n = features_t1 / (torch.norm(features_t1, dim=1, keepdim=True) + 1e-6)
-            features_t2_n = features_t2 / (torch.norm(features_t2, dim=1, keepdim=True) + 1e-6)
-            cost_features = 1 - torch.matmul(features_t1_n, features_t2_n.T)  # cosine similarity
+            features_t1_n = features_t1 / (
+                torch.norm(features_t1, dim=1, keepdim=True) + 1e-6
+            )
+            features_t2_n = features_t2 / (
+                torch.norm(features_t2, dim=1, keepdim=True) + 1e-6
+            )
+            cost_features = 1 - torch.matmul(
+                features_t1_n, features_t2_n.T
+            )  # cosine similarity
             cost_features[cost_features > config["association"]["max_feat"]] = 1e8
         else:
             cost_features = torch.zeros_like(cost_dists)
@@ -127,6 +141,7 @@ def association(
 
     return indices_t1, indices_t2
 
+
 def long_association(
     points_t1: torch.Tensor,
     points_t2: torch.Tensor,
@@ -160,8 +175,12 @@ def long_association(
     curr_id = obj_cache.max_id + 1
 
     # Initialize indices for t1 and t2
-    indices_t1 = torch.zeros(points_t1.shape[0], dtype=torch.int32, device=points_t1.device)
-    indices_t2 = torch.zeros(points_t2.shape[0], dtype=torch.int32, device=points_t2.device)
+    indices_t1 = torch.zeros(
+        points_t1.shape[0], dtype=torch.int32, device=points_t1.device
+    )
+    indices_t2 = torch.zeros(
+        points_t2.shape[0], dtype=torch.int32, device=points_t2.device
+    )
 
     for class_id in config["fore_classes"]:
         # Get the centers of clusters for the current class
@@ -191,13 +210,16 @@ def long_association(
             for i, cluster_id in enumerate(clusters_t2):
                 mask = class_mask_t2 & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
-                obj_cache.add_instance(class_id, Instance_data(
-                    id=curr_id,
-                    cl_id=cluster_id,
-                    life=config["association"]["life"],
-                    center=centers_t2[i],
-                    feature=features_t2[i],
-                ))
+                obj_cache.add_instance(
+                    class_id,
+                    Instance_data(
+                        id=curr_id,
+                        cl_id=cluster_id,
+                        life=config["association"]["life"],
+                        center=centers_t2[i],
+                        feature=features_t2[i],
+                    ),
+                )
                 curr_id += 1
             continue
 
@@ -205,13 +227,16 @@ def long_association(
         centers_t1_o = centers_t1.clone()
         if not prev_insts:
             for i, cluster_id in enumerate(clusters_t1):
-                obj_cache.add_instance(class_id, Instance_data(
-                    id=curr_id,
-                    cl_id=cluster_id,
-                    life=config["association"]["life"] - 1,
-                    center=centers_t1[i],
-                    feature=features_t1[i],
-                ))
+                obj_cache.add_instance(
+                    class_id,
+                    Instance_data(
+                        id=curr_id,
+                        cl_id=cluster_id,
+                        life=config["association"]["life"] - 1,
+                        center=centers_t1[i],
+                        feature=features_t1[i],
+                    ),
+                )
                 curr_id += 1
         else:
             features_t1 = torch.stack(
@@ -225,7 +250,10 @@ def long_association(
         # If no clusters are found in t2, assign ids to t1
         if clusters_t2.numel() == 0:
             life_mask = torch.tensor(
-                [prev_insts[k].life == config["association"]["life"] - 1 for k in prev_insts_keys],
+                [
+                    prev_insts[k].life == config["association"]["life"] - 1
+                    for k in prev_insts_keys
+                ],
                 device=centers_t1.device,
             )
             if life_mask.any():
@@ -245,9 +273,15 @@ def long_association(
         cost_dists = torch.cdist(centers_t1, centers_t2)
         cost_dists[cost_dists > config["association"]["max_dist"]] = 1e8
 
-        features_t1_n = features_t1 / (torch.norm(features_t1, dim=1, keepdim=True) + 1e-6)
-        features_t2_n = features_t2 / (torch.norm(features_t2, dim=1, keepdim=True) + 1e-6)
-        cost_features = 1 - torch.matmul(features_t1_n, features_t2_n.T)  # cosine similarity
+        features_t1_n = features_t1 / (
+            torch.norm(features_t1, dim=1, keepdim=True) + 1e-6
+        )
+        features_t2_n = features_t2 / (
+            torch.norm(features_t2, dim=1, keepdim=True) + 1e-6
+        )
+        cost_features = 1 - torch.matmul(
+            features_t1_n, features_t2_n.T
+        )  # cosine similarity
         cost_features[cost_features > config["association"]["max_feat"]] = 1e8
 
         assoc_cost = cost_dists + cost_features
@@ -265,24 +299,28 @@ def long_association(
                 if prev_inst.life == config["association"]["life"] - 1:
                     indices_t1[mask_t1] = prev_inst.id
                 indices_t2[mask_t2] = prev_inst.id
-                add_instances.append(Instance_data(
-                    id=prev_inst.id,
-                    cl_id=clusters_t2[col],
-                    life=config["association"]["life"],
-                    center=centers_t2[col],
-                    feature=(features_t2[col] + features_t1[row]) / 2,
-                ))
+                add_instances.append(
+                    Instance_data(
+                        id=prev_inst.id,
+                        cl_id=clusters_t2[col],
+                        life=config["association"]["life"],
+                        center=centers_t2[col],
+                        feature=(features_t2[col] + features_t1[row]) / 2,
+                    )
+                )
             else:
                 if prev_inst.life == config["association"]["life"] - 1:
                     indices_t1[mask_t1] = prev_inst.id
                 indices_t2[mask_t2] = curr_id
-                add_instances.append(Instance_data(
-                    id=curr_id,
-                    cl_id=clusters_t2[col],
-                    life=config["association"]["life"],
-                    center=centers_t2[col],
-                    feature=features_t2[col],
-                ))
+                add_instances.append(
+                    Instance_data(
+                        id=curr_id,
+                        cl_id=clusters_t2[col],
+                        life=config["association"]["life"],
+                        center=centers_t2[col],
+                        feature=features_t2[col],
+                    )
+                )
                 curr_id += 1
 
         # Handle the case where the number of clusters in t1 and t2 are different
@@ -301,13 +339,15 @@ def long_association(
                     continue
                 mask = class_mask_t2 & (points_t2[:, -1] == cluster_id)
                 indices_t2[mask] = curr_id
-                add_instances.append(Instance_data(
-                    id=curr_id,
-                    cl_id=cluster_id,
-                    life=config["association"]["life"],
-                    center=centers_t2[j],
-                    feature=features_t2[j],
-                ))
+                add_instances.append(
+                    Instance_data(
+                        id=curr_id,
+                        cl_id=cluster_id,
+                        life=config["association"]["life"],
+                        center=centers_t2[j],
+                        feature=features_t2[j],
+                    )
+                )
                 curr_id += 1
 
         # Update the object cache with new instances
