@@ -109,12 +109,16 @@ class SemanticKITTISemSeg(PCDataset):
         pc = np.fromfile(self.im_idx[index], dtype=np.float32).reshape((-1, 4))
 
         # Extract Label
-        labels_inst = np.fromfile(
-            self.im_idx[index].replace("velodyne", "labels")[:-3] + "label",
-            dtype=np.uint32,
-        ).reshape((-1, 1))
-        labels = labels_inst & 0xFFFF  # delete high 16 digits binary
-        labels = self.mapper(labels).astype(np.int32)
+        try:
+            labels_inst = np.fromfile(
+                self.im_idx[index].replace("velodyne", "labels")[:-3] + "label",
+                dtype=np.uint32,
+            ).reshape((-1, 1))
+        except FileNotFoundError:
+            labels = np.zeros((pc.shape[0], 1), dtype=np.int32)
+        else:
+            labels = labels_inst & 0xFFFF  # delete high 16 digits binary
+            labels = self.mapper(labels).astype(np.int32)
 
         # Map ignore index (0) to 255
         labels = labels[:, 0] - 1

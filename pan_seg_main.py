@@ -156,7 +156,7 @@ if __name__ == "__main__":
     dataloader = get_dataloader(dataset, args)
 
     # Load pretrained model
-    ckpt = torch.load(args.pretrained_ckpt, map_location="cpu")
+    ckpt = torch.load(args.pretrained_ckpt, map_location="cpu", weights_only=True)
     ckpt = ckpt["net"]
     new_ckpt = {}
     for k in ckpt.keys():
@@ -177,6 +177,7 @@ if __name__ == "__main__":
     # Set model to evaluation mode
     model.load_state_dict(new_ckpt)
     model = model.to(device)
+    model.compile()
     model.eval()
 
     # Initialize
@@ -224,8 +225,8 @@ if __name__ == "__main__":
         predictions = {}
         batch_size = batch["feat"].shape[0]
         for src_id, dst_id in zip(range(0, batch_size - 1), range(1, batch_size)):
-            src_points = feat[src_id, 1:4, batch["upsample"][src_id]].T[:, 1:4]
-            dst_points = feat[dst_id, 1:4, batch["upsample"][dst_id]].T[:, 1:4]
+            src_points = feat[src_id, 1:4, batch["upsample"][src_id]].T
+            dst_points = feat[dst_id, 1:4, batch["upsample"][dst_id]].T
 
             src_features = tokens[src_id, :, batch["upsample"][src_id]].T
             dst_features = tokens[dst_id, :, batch["upsample"][dst_id]].T
@@ -335,17 +336,18 @@ if __name__ == "__main__":
                 start_idx = end_idx
                 continue
 
-            lidarseg_labels = labels[start_idx:end_idx].cpu().numpy()
-            instance_labels = inst_lab[start_idx:end_idx].cpu().numpy()
-            start_idx = end_idx
+            if not args.test:
+                lidarseg_labels = labels[start_idx:end_idx].cpu().numpy()
+                instance_labels = inst_lab[start_idx:end_idx].cpu().numpy()
+                start_idx = end_idx
 
-            evaluator.update(
-                batch["scene"][batch_id]["token"],
-                predictions[batch_id],
-                instances[batch_id],
-                lidarseg_labels,
-                instance_labels,
-            )
+                evaluator.update(
+                    batch["scene"][batch_id]["token"],
+                    predictions[batch_id],
+                    instances[batch_id],
+                    lidarseg_labels,
+                    instance_labels,
+                )
 
             # save segmentation files
             if args.save_path is not None:
@@ -371,7 +373,7 @@ if __name__ == "__main__":
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
-    with open(time.strftime("results/Log_%Y-%m-%d_%H-%M-%S", time.gmtime()), "w") as fh:
+    with open(time.strftime("results/Log_%Y-%m-%d_%H-%M-%S.out", time.gmtime()), "w") as fh:
         fh.write(f"Config:\n{config_msg}\n\n")
         fh.write(
             f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n"

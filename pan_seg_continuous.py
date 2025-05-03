@@ -91,6 +91,7 @@ class PanSegmenter:
         # Set model to evaluation mode
         self.model.load_state_dict(new_ckpt)
         self.model = self.model.to(device)
+        self.model.compile()
         self.model.eval()
 
         # Initialize

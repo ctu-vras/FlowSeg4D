@@ -1,6 +1,6 @@
 ##### Load modules on SLURM cluster
-ml Open3D/0.18.0-foss-2023b-CUDA-12.4.0
-ml PyTorch3D/0.7.8-foss-2023b-CUDA-12.4.0
+ml Open3D/0.17.0-foss-2022a-CUDA-11.7.0
+ml PyTorch3D/0.7.1-foss-2022a-CUDA-11.7.0
 
 ##### Create a virtual environment
 python3 -m venv unsup3D
