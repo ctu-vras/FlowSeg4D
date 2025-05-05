@@ -14,9 +14,9 @@ import numpy as np
 ###############################
 
 
-def load_model_config(file: str) -> dict:
+def load_config(file: str) -> dict:
     """
-    Load the model configuration from a YAML file.
+    Load the configuration from a YAML file.
     Args:
         file (str): The path to the YAML file.
     Returns:

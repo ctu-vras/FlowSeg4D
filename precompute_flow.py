@@ -10,7 +10,7 @@ from nuscenes.utils.geometry_utils import transform_matrix
 
 from utils.flow import flow_estimation_lif
 from LetItFlow.let_it_flow import initial_clustering
-from utils.misc import load_model_config, transform_pointcloud
+from utils.misc import load_config, transform_pointcloud
 
 os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["MKL_NUM_THREADS"] = "4"
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     if args.savedir is None:
         args.savedir = args.dataroot
 
-    config = load_model_config("configs/config.yaml")
+    config = load_config("configs/config.yaml")
     device = "cpu"
     if torch.cuda.is_available():
         if args.gpu is not None:

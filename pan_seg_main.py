@@ -16,7 +16,7 @@ from utils.misc import (
     save_data,
     print_config,
     process_configs,
-    load_model_config,
+    load_config,
     transform_pointcloud,
 )
 
@@ -110,9 +110,9 @@ if __name__ == "__main__":
         )
 
     # Load config files
-    config_panseg = load_model_config("configs/config.yaml")
-    config_pretrain = load_model_config(args.config_pretrain)
-    config_model = load_model_config(config_panseg[args.dataset]["config_downstream"])
+    config_panseg = load_config("configs/config.yaml")
+    config_pretrain = load_config(args.config_pretrain)
+    config_model = load_config(config_panseg[args.dataset]["config_downstream"])
 
     process_configs(args, config_panseg, config_pretrain, config_model)
     config_msg = print_config(args, config_panseg)
@@ -373,7 +373,9 @@ if __name__ == "__main__":
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
 
-    with open(time.strftime("results/Log_%Y-%m-%d_%H-%M-%S.out", time.gmtime()), "w") as fh:
+    with open(
+        time.strftime("results/Log_%Y-%m-%d_%H-%M-%S.out", time.gmtime()), "w"
+    ) as fh:
         fh.write(f"Config:\n{config_msg}\n\n")
         fh.write(
             f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}\n"

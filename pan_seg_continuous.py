@@ -14,7 +14,7 @@ from utils.misc import (
     save_data,
     process_configs,
     print_config_cont,
-    load_model_config,
+    load_config,
     transform_pointcloud,
 )
 
@@ -24,11 +24,9 @@ class PanSegmenter:
         self.args = args
 
         # Load config files
-        config_panseg = load_model_config("configs/config.yaml")
-        config_pretrain = load_model_config(args.config_pretrain)
-        config_model = load_model_config(
-            config_panseg[args.dataset]["config_downstream"]
-        )
+        config_panseg = load_config("configs/config.yaml")
+        config_pretrain = load_config(args.config_pretrain)
+        config_model = load_config(config_panseg[args.dataset]["config_downstream"])
 
         process_configs(args, config_panseg, config_pretrain, config_model)
         config_msg = print_config_cont(args, config_panseg)
