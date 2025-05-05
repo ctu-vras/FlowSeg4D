@@ -1,0 +1,41 @@
+pone:
+  colors: [
+      [255, 0, 0], # barrier
+      [0, 255, 0], # bicycle
+      [0, 0, 255], # bus
+      [255, 255, 0], # car
+      [255, 0, 255], # construction_vehicle
+      [0, 255, 255], # motorcycle
+      [255, 165, 0], # pedestrian
+      [128, 0, 128], # traffic_cone
+      [0, 128, 0], # trailer
+      [255, 192, 203], # truck
+      [128, 128, 128], # driveable_surface
+      [165, 42, 42], # other_flat
+      [211, 211, 211], # sidewalk
+      [34, 139, 34], # terrain
+      [255, 215, 0], # manmade
+      [173, 255, 47], # vegetation
+    ]
+  fps: 30
+
+nuscenes:
+  colors: [
+      [255, 0, 0], # barrier
+      [0, 255, 0], # bicycle
+      [0, 0, 255], # bus
+      [255, 255, 0], # car
+      [255, 0, 255], # construction_vehicle
+      [0, 255, 255], # motorcycle
+      [255, 165, 0], # pedestrian
+      [128, 0, 128], # traffic_cone
+      [0, 128, 0], # trailer
+      [255, 192, 203], # truck
+      [128, 128, 128], # driveable_surface
+      [165, 42, 42], # other_flat
+      [211, 211, 211], # sidewalk
+      [34, 139, 34], # terrain
+      [255, 215, 0], # manmade
+      [173, 255, 47], # vegetation
+    ]
+  fps: 30
