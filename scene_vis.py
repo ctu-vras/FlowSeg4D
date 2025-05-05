@@ -1,7 +1,10 @@
 import os
+import time
 import argparse
 
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 from utils.misc import load_config
 from utils.visualization import visualize_scene
@@ -29,7 +32,24 @@ def parse_args():
     parser.add_argument(
         "--dataset", type=str, default="pone", help="What dataset config to use"
     )
+    parser.add_argument(
+        "--fps", type=int, default=None, help="Frames per second for visualization."
+    )
     return parser.parse_args()
+
+
+def show_legend(colors, labels):
+    _, ax = plt.subplots()
+    for i, name, color in zip(range(len(colors)), labels, colors):
+        ax.text(0.16, 0.9 - i * 0.05, name, transform=ax.transAxes)
+        ax.add_patch(
+            mpatches.Rectangle(
+                (0.1, 0.9 - i * 0.05), 0.05, 0.05, color=color, transform=ax.transAxes
+            )
+        )
+
+    ax.axis("off")
+    plt.pause(0.1)
 
 
 if __name__ == "__main__":
@@ -43,7 +63,11 @@ if __name__ == "__main__":
         raise ValueError(f"Dateset {args.dataset} not supported.")
     config = load_config("configs/visualization.yaml")[args.dataset.lower()]
     config["instances"] = args.instances
-    config["colors"] = np.array(config["colors"])
+    config["colors"] = np.array(config["colors"]) / 255
+    if args.fps is not None:
+        config["fps"] = args.fps
+
+    show_legend(config["colors"], config["names"])
 
     try:
         visualize_scene(config, args.pcd_dir, args.labels_dir)

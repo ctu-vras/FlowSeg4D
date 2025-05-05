@@ -40,7 +40,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
                 labels / (labels.max() if labels.max() > 0 else 1)
             )
         else:
-            colors = config["colors"][labels] / 255.0
+            colors = config["colors"][labels]
         pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
 
         # Visualize the point cloud

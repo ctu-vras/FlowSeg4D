@@ -17,6 +17,25 @@ pone:
       [255, 215, 0], # manmade
       [173, 255, 47], # vegetation
     ]
+  names:
+    [
+      "barrier",
+      "bicycle",
+      "bus",
+      "car",
+      "construction vehicle",
+      "motorcycyle",
+      "pedestrian",
+      "traffic cone",
+      "trailer",
+      "truck",
+      "driveable surface",
+      "other flat",
+      "sidewalk",
+      "terrain",
+      "manmade",
+      "vegetation",
+    ]
   fps: 30
 
 nuscenes:
@@ -37,5 +56,24 @@ nuscenes:
       [34, 139, 34], # terrain
       [255, 215, 0], # manmade
       [173, 255, 47], # vegetation
+    ]
+  names:
+    [
+      "barrier",
+      "bicycle",
+      "bus",
+      "car",
+      "construction vehicle",
+      "motorcycyle",
+      "pedestrian",
+      "traffic cone",
+      "trailer",
+      "truck",
+      "driveable surface",
+      "other flat",
+      "sidewalk",
+      "terrain",
+      "manmade",
+      "vegetation",
     ]
   fps: 30
