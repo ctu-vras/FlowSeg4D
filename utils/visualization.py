@@ -39,6 +39,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
             colors = plt.get_cmap("hsv")(
                 labels / (labels.max() if labels.max() > 0 else 1)
             )
+            colors[labels == 0] = 0
         else:
             colors = config["colors"][labels]
         pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])

@@ -63,11 +63,13 @@ if __name__ == "__main__":
         raise ValueError(f"Dateset {args.dataset} not supported.")
     config = load_config("configs/visualization.yaml")[args.dataset.lower()]
     config["instances"] = args.instances
-    config["colors"] = np.array(config["colors"]) / 255
+    if config["colors"] is not None:
+        config["colors"] = np.array(config["colors"]) / 255
     if args.fps is not None:
         config["fps"] = args.fps
 
-    show_legend(config["colors"], config["names"])
+    if not config["instances"] and config["colors"] is not None:
+        show_legend(config["colors"], config["names"])
 
     try:
         visualize_scene(config, args.pcd_dir, args.labels_dir)
