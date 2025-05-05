@@ -59,9 +59,10 @@ if __name__ == "__main__":
     if not os.path.exists(args.labels_dir):
         raise FileNotFoundError(f"Labels directory {args.labels_dir} does not exist.")
 
-    if args.dataset.lower() not in ["pone", "nuscenes"]:
+    if args.dataset.lower() not in ["pone", "nuscenes", "semantic_kitti"]:
         raise ValueError(f"Dateset {args.dataset} not supported.")
     config = load_config("configs/visualization.yaml")[args.dataset.lower()]
+    config["dataset"] = args.dataset.lower()
     config["instances"] = args.instances
     if config["colors"] is not None:
         config["colors"] = np.array(config["colors"]) / 255

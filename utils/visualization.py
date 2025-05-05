@@ -7,6 +7,8 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 
+from utils.misc import load_config
+
 
 def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
     pcd_files = sorted(os.listdir(pcd_dir))
@@ -17,8 +19,20 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
     pcd = o3d.geometry.PointCloud()
     geometry_added = False
 
+    if config["dataset"] == "semantic_kitti":
+        sem_kitti_conf = load_config("configs/semantic-kitti.yaml")
+        mapper = np.vectorize(sem_kitti_conf["learning_map"].__getitem__)
+
     for pcd_file, lab_file in zip(pcd_files, lab_files):
-        points = np.load(os.path.join(pcd_dir, pcd_file))["pcd"][:, :3]
+        start_time = time.time_ns()
+        if config["dataset"] == "pone":
+            points = np.load(os.path.join(pcd_dir, pcd_file))["pcd"][:, :3]
+        elif config["dataset"] == "semantic_kitti":
+            points = np.fromfile(
+                os.path.join(pcd_dir, pcd_file), dtype=np.float32
+            ).reshape(-1, 4)[:, :3]
+        else:
+            raise ValueError(f"Dataset {config['dataset']} not supported.")
         pcd.points = o3d.utility.Vector3dVector(points)
 
         # Load labels
@@ -33,12 +47,12 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
                 np.fromfile(os.path.join(labels_dir, lab_file), dtype=np.uint32)
                 & 0xFFFF
             ).astype(np.int16)
+            if config["dataset"] == "semantic_kitti":
+                labels = mapper(labels)
 
         # Assign colors based on labels
         if config["colors"] is None or config["instances"]:
-            colors = plt.get_cmap("hsv")(
-                labels / (labels.max() if labels.max() > 0 else 1)
-            )
+            colors = plt.get_cmap("prism")(labels / 250)
             colors[labels == 0] = 0
         else:
             colors = config["colors"][labels]
@@ -52,7 +66,9 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
             vis.update_geometry(pcd)
         vis.poll_events()
         vis.update_renderer()
-        time.sleep(1 / config["fps"])
+        duration = time.time_ns() - start_time
+        if (duration // 1000000) < config["fps"]:
+            time.sleep(config["fps"] - (duration // 1000000))
 
 
 def visualize_pcd(
@@ -66,9 +82,9 @@ def visualize_pcd(
         assert pcd_in.shape[1] == 3, "Input data must have shape (N, 3)"
         assert pcd_in.shape[0] > 0, "Input data must have at least one point"
         if labels is not None:
-            assert (
-                pcd_in.shape[0] == labels.shape[0]
-            ), "Number of points must match number of labels"
+            assert pcd_in.shape[0] == labels.shape[0], (
+                "Number of points must match number of labels"
+            )
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pcd_in)
