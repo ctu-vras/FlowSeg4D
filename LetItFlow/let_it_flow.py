@@ -1,5 +1,7 @@
 import torch
+import numpy as np
 from torch_scatter import scatter
+from sklearn.cluster import DBSCAN
 from pytorch3d.ops.knn import knn_points
 
 from LetItFlow import sc_utils
@@ -100,3 +102,26 @@ def center_rigidity_loss(pc1, flow, cluster_ids):
     rigidity_loss = center_displacement.norm(dim=-1).mean()
 
     return rigidity_loss
+
+
+def initial_clustering(src_frame, dst_frame, device, eps=0.3, min_samples=1, z_scale=0.5):
+    src_frame = np.concatenate([src_frame, np.zeros((src_frame.shape[0], 1))], axis=1)
+    dst_frame = np.concatenate([dst_frame, np.ones((dst_frame.shape[0], 1))], axis=1)
+
+    to_cluster_pc1 = np.concatenate([src_frame, dst_frame], axis=0)
+    scaled_cluster_pc1 = to_cluster_pc1[:,:3] * (1,1, z_scale)   # scale z-axis
+    # Spatio-temporal clustering with fixed temporal range
+    clusters = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(scaled_cluster_pc1[:,:3])
+
+    p1 = to_cluster_pc1[to_cluster_pc1[:,3] == 0][:,:3]
+    p2 = to_cluster_pc1[to_cluster_pc1[:,3] == 1][:,:3]
+
+    c1 = clusters[to_cluster_pc1[:,3] == 0]
+    c2 = clusters[to_cluster_pc1[:,3] == 1]
+    
+    p1 = torch.tensor(p1, device=device, dtype=torch.float32)
+    p2 = torch.tensor(p2, device=device, dtype=torch.float32)
+    c1 = torch.tensor(c1, device=device)    # clusters are without batch dim
+    c2 = torch.tensor(c2, device=device)
+
+    return p1, p2, c1, c2

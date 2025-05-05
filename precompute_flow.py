@@ -9,6 +9,7 @@ from nuscenes.nuscenes import NuScenes
 from nuscenes.utils.geometry_utils import transform_matrix
 
 from utils.flow import flow_estimation_lif
+from LetItFlow.let_it_flow import initial_clustering
 from utils.misc import load_model_config, transform_pointcloud
 
 os.environ["OMP_NUM_THREADS"] = "4"
@@ -217,22 +218,32 @@ if __name__ == "__main__":
                 dst_points = transform_pointcloud(dst_points, dst_ego)
 
                 # Load labels
-                src_labels = np.fromfile(
-                    os.path.join(scene_dir, "labels", f"{i:06d}.label"),
-                    dtype=np.uint32,
-                )
-                src_labels = src_labels & 0xFFFF
-                src_labels = (
-                    torch.from_numpy(src_labels.astype(np.int32)).to(device).long()
-                )
-                dst_labels = np.fromfile(
-                    os.path.join(scene_dir, "labels", f"{i+1:06d}.label"),
-                    dtype=np.uint32,
-                )
-                dst_labels = dst_labels & 0xFFFF
-                dst_labels = (
-                    torch.from_numpy(dst_labels.astype(np.int32)).to(device).long()
-                )
+                if scene < 11:
+                    src_labels = np.fromfile(
+                        os.path.join(scene_dir, "labels", f"{i:06d}.label"),
+                        dtype=np.uint32,
+                    )
+                    src_labels = src_labels & 0xFFFF
+                    src_labels = (
+                        torch.from_numpy(src_labels.astype(np.int32)).to(device).long()
+                    )
+                    dst_labels = np.fromfile(
+                        os.path.join(scene_dir, "labels", f"{i+1:06d}.label"),
+                        dtype=np.uint32,
+                    )
+                    dst_labels = dst_labels & 0xFFFF
+                    dst_labels = (
+                        torch.from_numpy(dst_labels.astype(np.int32)).to(device).long()
+                    )
+                else:
+                    src_points, dst_points, src_labels, dst_labels = initial_clustering(
+                        src_points.cpu().numpy(),
+                        dst_points.cpu().numpy(),
+                        device=device,
+                        eps=0.3,
+                        min_samples=1,
+                        z_scale=0.5,
+                    )
 
                 flow = flow_estimation_lif(
                     config=config,
