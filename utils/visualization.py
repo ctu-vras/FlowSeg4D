@@ -1,11 +1,44 @@
 import sklearn
 
+import os
+import time
 from typing import Optional, Union
 
 import torch
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
+
+
+def visualize_scene(pcd_dir: str, labels_dir: str) -> None:
+    pcd_files = sorted(os.listdir(pcd_dir))
+    lab_files = sorted(os.listdir(labels_dir))
+
+    # vis = o3d.visualization.Visualizer()
+    # vis.create_window()
+    pcd = o3d.geometry.PointCloud()
+    geometry_added = False
+    for pcd_file, lab_file in zip(pcd_files, lab_files):
+        points = np.load(os.path.join(pcd_dir, pcd_file))["pcd"][:, :3]
+        labels = (
+            np.fromfile(os.path.join(labels_dir, lab_file), dtype=np.uint32) & 0xFFFF
+        )
+
+        pcd.points = o3d.utility.Vector3dVector(points)
+        colors = plt.get_cmap("hsv")(labels / (labels.max() if labels.max() > 0 else 1))
+        pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
+
+        o3d.visualization.draw_geometries([pcd])
+        exit()
+
+        # if not geometry_added:
+        #     vis.add_geometry(pcd)
+        #     geometry_added = True
+        # else:
+        #     vis.update_geometry(pcd)
+        # vis.poll_events()
+        # vis.update_renderer()
+        # time.sleep(0.5)
 
 
 def visualize_pcd(
