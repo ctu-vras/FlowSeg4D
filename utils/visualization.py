@@ -9,10 +9,15 @@ import matplotlib.pyplot as plt
 
 from utils.misc import load_config
 
+MAX_INST = 20
+
 
 def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
     pcd_files = sorted(os.listdir(pcd_dir))
     lab_files = sorted(os.listdir(labels_dir))
+    assert len(pcd_files) == len(lab_files), (
+        f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
+    )
 
     vis = o3d.visualization.Visualizer()
     vis.create_window()
@@ -52,7 +57,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
 
         # Assign colors based on labels
         if config["colors"] is None or config["instances"]:
-            colors = plt.get_cmap("prism")(labels / 250)
+            colors = plt.get_cmap("tab20")((labels % MAX_INST) / MAX_INST)
             colors[labels == 0] = 0
         else:
             colors = config["colors"][labels]
@@ -62,6 +67,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
         if not geometry_added:
             vis.add_geometry(pcd)
             geometry_added = True
+            time.sleep(2)
         else:
             vis.update_geometry(pcd)
         vis.poll_events()
