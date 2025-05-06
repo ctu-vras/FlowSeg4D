@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
     # For SemanticKITTI initialize inverse mapping
     if args.dataset == "semantic_kitti":
-        sem_kitti = load_model_config("configs/semantic-kitti.yaml")
+        sem_kitti = load_config("configs/semantic-kitti.yaml")
         mapper = np.vectorize(sem_kitti["learning_map_inv"].__getitem__)
 
     for i, batch in enumerate(dataloader):
@@ -275,10 +275,10 @@ if __name__ == "__main__":
 
             # associate -- set temporally consistent instance id
             ind_src, ind_dst = None, None
-            if prev_ind is not None and src_id == 0:
+            if prev_scene is not None and src_id == 0:
                 if prev_scene["token"] == batch["scene"][src_id]["token"]:
                     if config_panseg["association"]["use_long"]:
-                        _, ind_src = long_association(
+                        prev_ind, ind_src = long_association(
                             prev_points,
                             src_points,
                             config_panseg,
@@ -287,7 +287,7 @@ if __name__ == "__main__":
                             prev_flow,
                         )
                     else:
-                        _, ind_src = association(
+                        prev_ind, ind_src = association(
                             prev_points,
                             src_points,
                             config_panseg,
@@ -295,7 +295,20 @@ if __name__ == "__main__":
                             ind_cache,
                             prev_flow,
                         )
-                    ind_cache.max_id = int(max(prev_ind.max(), ind_src.max()))
+
+                    # save segmentation files
+                    if args.save_path is not None:
+                        preds = prev_points[:, -2].cpu().numpy()
+                        if args.dataset == "semantic_kitti":
+                            preds = mapper(preds + 1)
+                        save_data(
+                            args.save_path,
+                            prev_scene["name"],
+                            prev_filename,
+                            preds,
+                            prev_ind.cpu().numpy(),
+                        )
+                    ind_cache.max_id = int(max(ind_cache.max_id, prev_ind.max(), ind_src.max()))
                     prev_ind = ind_src
                 else:
                     prev_ind = None
@@ -309,13 +322,14 @@ if __name__ == "__main__":
                     ind_src, ind_dst = association(
                         src_points, dst_points, config_panseg, prev_ind, ind_cache, flow
                     )
-                ind_cache.max_id = int(max(ind_src.max(), ind_dst.max()))
+                ind_cache.max_id = int(max(ind_cache.max_id, ind_src.max(), ind_dst.max()))
                 prev_ind = ind_dst
             else:
                 prev_ind = None
                 ind_cache.reset()
             prev_points = dst_points
             prev_scene = batch["scene"][dst_id]
+            prev_filename = batch["filename"][dst_id]
             if args.flow:
                 prev_flow = scene_flow[dst_id, :, batch["upsample"][dst_id]].T
             else:
@@ -352,7 +366,7 @@ if __name__ == "__main__":
             # save segmentation files
             if args.save_path is not None:
                 if args.dataset == "semantic_kitti":
-                    predictions[batch_id] = mapper(predictions[batch_id])
+                    predictions[batch_id] = mapper(predictions[batch_id] + 1)
                 save_data(
                     args.save_path,
                     batch["scene"][batch_id]["name"],
@@ -372,6 +386,9 @@ if __name__ == "__main__":
     LSTQ, AQ_ovr, AQ, AQ_p, AQ_r, iou, iou_mean, iou_p, iou_r = evaluator.compute()
     print(f"LSTQ: {LSTQ},\nAQ_ovr: {AQ_ovr},\nAQ: {AQ},\nAQ_p: {AQ_p},\nAQ_r: {AQ_r}")
     print(f"iou: {iou},\niou_mean: {iou_mean},\niou_p: {iou_p},\niou_r: {iou_r}")
+
+    if np.isnan(LSTQ):
+        exit()
 
     with open(
         time.strftime("results/Log_%Y-%m-%d_%H-%M-%S.out", time.gmtime()), "w"

@@ -117,7 +117,7 @@ def print_config(args: argparse.Namespace, config: dict) -> str:
     msg += f"Verbose: {args.verbose}\n"
 
     print("\nConfiguration:")
-    print("=" * 20)
+    print("=" * 14)
     print(msg)
     return msg
 

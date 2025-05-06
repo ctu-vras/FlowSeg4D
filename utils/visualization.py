@@ -53,7 +53,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
                 & 0xFFFF
             ).astype(np.int16)
             if config["dataset"] == "semantic_kitti":
-                labels = mapper(labels)
+                labels = mapper(labels) - 1
 
         # Assign colors based on labels
         if config["colors"] is None or config["instances"]:
@@ -61,6 +61,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
             colors[labels == 0] = 0
         else:
             colors = config["colors"][labels]
+            colors[labels == -1] = 0
         pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
 
         # Visualize the point cloud

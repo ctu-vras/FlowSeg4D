@@ -172,7 +172,7 @@ class PanSegmenter:
                 None,
             )
         self.prev_ind = ind_src
-        self.obj_cache.max_id = int(max(self.prev_ind.max(), ind_src.max()))
+        self.obj_cache.max_id = int(max(self.obj_cache.max_id, self.prev_ind.max(), ind_src.max()))
 
         self.prev_points = src_points
         self.prev_scene = data["scene"][0]
@@ -267,9 +267,9 @@ if __name__ == "__main__":
     args.batch_size = 1
 
     # Load config files
-    config_panseg = load_model_config("configs/config.yaml")
-    config_pretrain = load_model_config(args.config_pretrain)
-    config_model = load_model_config(config_panseg[args.dataset]["config_downstream"])
+    config_panseg = load_config("configs/config.yaml")
+    config_pretrain = load_config(args.config_pretrain)
+    config_model = load_config(config_panseg[args.dataset]["config_downstream"])
     process_configs(args, config_panseg, config_pretrain, config_model)
 
     # Load dataset
