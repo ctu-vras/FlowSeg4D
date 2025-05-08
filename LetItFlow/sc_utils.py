@@ -39,39 +39,3 @@ def spatial_consistency_score(M, leading_eig):
     sc_score = leading_eig[:, None, :] @ M @ leading_eig[:, :, None]
     sc_score = sc_score.squeeze(-1) / M.shape[1]
     return sc_score
-
-
-def spatial_consistency_loss(src_keypts, tgt_keypts, d_thre=0.1, max_points=3000):
-    """
-    Input:sc_utils
-        - src_keypts: [bs, num_corr, 3]
-        - tgt_keypts: [bs, num_corr, 3]
-    Output:
-        - sc_loss:   [bs, 1], the spatial consistency loss.
-    """
-    _, num_corr = src_keypts.shape[0], tgt_keypts.shape[1]
-
-    # (Optional) random sample points
-    if num_corr > max_points:
-        rand_perm = torch.randperm(num_corr)
-        rand_idx = rand_perm[:max_points]
-
-        src_keypts = src_keypts[:, rand_idx, :]
-        tgt_keypts = tgt_keypts[:, rand_idx, :]
-
-    # Spatial Consistency Adjacency Matrix
-    src_dist = torch.norm(
-        (src_keypts[:, :, None, :] - src_keypts[:, None, :, :]), dim=-1
-    )
-    target_dist = torch.norm(
-        (tgt_keypts[:, :, None, :] - tgt_keypts[:, None, :, :]), dim=-1
-    )
-    cross_dist = torch.abs(src_dist - target_dist)
-    adj_mat = torch.clamp(1.0 - cross_dist**2 / d_thre**2, min=0)
-
-    # Spatial Consistency Loss
-    lead_eigvec = power_iteration(adj_mat)
-    sc_score = spatial_consistency_score(adj_mat, lead_eigvec)
-    sc_loss = -torch.log(sc_score)
-
-    return sc_loss

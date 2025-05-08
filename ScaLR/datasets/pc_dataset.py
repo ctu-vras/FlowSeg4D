@@ -221,7 +221,7 @@ class PCDataset(Dataset):
             # Filename of original point cloud
             filename,
             # Ego motion
-            ego_motion,
+            ego_motion[None] if ego_motion is not None else None,
             # Scene
             scene,
             # Sample
@@ -295,7 +295,7 @@ class Collate:
         labels_orig = torch.from_numpy(np.hstack(label_orig)).long()
         upsample = [torch.from_numpy(u) for u in upsample]
         if ego_motion[0] is not None:
-            ego_motion = [torch.from_numpy(e).float() for e in ego_motion]
+            ego_motion = torch.from_numpy(np.vstack(ego_motion)).float()
         if panoptic_labels[0] is not None:
             panoptic_labels = torch.from_numpy(np.hstack(panoptic_labels)).long()
         if flow[0] is not None:

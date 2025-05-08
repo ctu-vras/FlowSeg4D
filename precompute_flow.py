@@ -87,7 +87,7 @@ if __name__ == "__main__":
     if args.savedir is None:
         args.savedir = args.dataroot
 
-    config = load_config("configs/config.yaml")
+    config = load_config("configs/let-it-flow.yaml")
     device = "cpu"
     if torch.cuda.is_available():
         if args.gpu is not None:

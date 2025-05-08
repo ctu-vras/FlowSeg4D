@@ -50,11 +50,6 @@ class PanSegmenter:
         )
 
         # Adding classification layer
-        self.model.classif = torch.nn.Conv1d(
-            config_model["waffleiron"]["nb_channels"],
-            config_model["waffleiron"]["pretrain_dim"],
-            1,
-        )
         classif = torch.nn.Conv1d(
             config_model["waffleiron"]["nb_channels"],
             config_model["classif"]["nb_class"],

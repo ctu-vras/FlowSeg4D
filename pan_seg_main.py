@@ -134,11 +134,6 @@ if __name__ == "__main__":
     )
 
     # Adding classification layer
-    model.classif = torch.nn.Conv1d(
-        config_model["waffleiron"]["nb_channels"],
-        config_model["waffleiron"]["pretrain_dim"],
-        1,
-    )
     classif = torch.nn.Conv1d(
         config_model["waffleiron"]["nb_channels"],
         config_model["classif"]["nb_class"],

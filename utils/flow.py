@@ -12,12 +12,12 @@ def flow_estimation_lif(config, src_points, dst_points, src_labels, dst_labels, 
     c1, c2 = src_labels, dst_labels
     f1 = torch.zeros(p1.shape, device=device, requires_grad=True)
 
-    optimizer = torch.optim.Adam([f1], lr=config["let_it_flow"]["lr"])
+    optimizer = torch.optim.Adam([f1], lr=config["lr"])
     RigidLoss = let_it_flow.SC2_KNN_cluster_aware(
-        p1, K=config["let_it_flow"]["K"], d_thre=config["let_it_flow"]["d_thre"]
+        p1, K=config["K"], d_thre=config["d_thre"]
     )
 
-    for i in range(config["let_it_flow"]["iters"]):
+    for i in range(config["iters"]):
         loss = 0
 
         dist, nn, _ = knn_points(
@@ -26,22 +26,22 @@ def flow_estimation_lif(config, src_points, dst_points, src_labels, dst_labels, 
         dist_b, _, _ = knn_points(
             p2, p1 + f1, lengths1=None, lengths2=None, K=1, return_nn=True
         )
-        loss += config["let_it_flow"]["dist_w"] * (
-            dist[dist < config["let_it_flow"]["trunc_dist"]].mean()
-            + dist_b[dist_b < config["let_it_flow"]["trunc_dist"]].mean()
+        loss += config["dist_w"] * (
+            dist[dist < config["trunc_dist"]].mean()
+            + dist_b[dist_b < config["trunc_dist"]].mean()
         )
 
         sc_loss = RigidLoss(f1, c1)
 
-        if config["let_it_flow"]["sc_w"] > 0:
-            loss += config["let_it_flow"]["sc_w"] * sc_loss
-            loss += config["let_it_flow"]["sc_w"] + let_it_flow.center_rigidity_loss(
+        if config["sc_w"] > 0:
+            loss += config["sc_w"] * sc_loss
+            loss += config["sc_w"] + let_it_flow.center_rigidity_loss(
                 p1, f1, c1[None] + 1
             )
 
         loss += f1[..., 2].norm().mean()
 
-        if i % 10 == 0 and config["let_it_flow"]["passing_ids"]:
+        if i % 10 == 0 and config["passing_ids"]:
             c1 = let_it_flow.pass_id_clusters(c1, c2, nn)
 
         loss.backward()

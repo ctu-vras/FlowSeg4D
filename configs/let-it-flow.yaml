@@ -1,0 +1,11 @@
+K: 16
+d_thre: 0.03
+dist_w: 2.
+eps: 0.3
+iters: 1000
+lr: 0.03
+passing_ids: True
+min_samples: 1
+sc_w: 1.
+temporal_range: 2
+trunc_dist: 0.5

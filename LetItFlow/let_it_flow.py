@@ -46,7 +46,6 @@ class SC2_KNN_cluster_aware(torch.nn.Module):
     use_normals : Whether to use surface estimation for neighborhood construction
     d_thre : constant for working with the displacements as percentual statistics, we use value from https://github.com/ZhiChen902/SC2-PCR
     """
-
     def __init__(self, pc1, K=16, d_thre=0.03):
         super().__init__()
         self.d_thre = d_thre
@@ -110,6 +109,7 @@ def initial_clustering(src_frame, dst_frame, device, eps=0.3, min_samples=1, z_s
 
     to_cluster_pc1 = np.concatenate([src_frame, dst_frame], axis=0)
     scaled_cluster_pc1 = to_cluster_pc1[:,:3] * (1,1, z_scale)   # scale z-axis
+
     # Spatio-temporal clustering with fixed temporal range
     clusters = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(scaled_cluster_pc1[:,:3])
 
