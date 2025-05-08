@@ -193,6 +193,7 @@ def process_configs(
     """
     config_panseg["num_classes"] = config_model["classif"]["nb_class"]
     config_panseg["fore_classes"] = config_panseg[args.dataset]["fore_classes"]
+    config_panseg["ego_vehicle"] = config_panseg[args.dataset]["ego_vehicle"]
     config_panseg["ignore_classes"] = None
     if args.clustering is not None:
         config_panseg["clustering"]["clustering_method"] = args.clustering.lower()
@@ -348,6 +349,30 @@ def get_centers_for_class(
             )
 
     return centers.double(), clusters
+
+
+def get_ego_vehicle_mask(points: torch.Tensor, config: dict) -> torch.Tensor:
+    """
+    Get the ego vehicle mask from the configuration.
+
+    Args:
+        points (torch.Tensor): The input pointcloud of shape (N, 3).
+        config (dict): The configuration dictionary.
+
+    Returns:
+        torch.Tensor: The ego vehicle mask.
+    """
+    assert points.dim() == 2, "The input pointcloud should have shape (N, 3)"
+    assert points.shape[1] == 3, "The input pointcloud should have shape (N, 3)"
+
+    mask = (
+        (-config["ego_vehicle"][0] / 2 <= points[:, 0])
+        & (points[:, 0] <= config["ego_vehicle"][0] / 2)
+        & (-config["ego_vehicle"][1] / 2 <= points[:, 1])
+        & (points[:, 1] <= config["ego_vehicle"][1] / 2)
+    )
+
+    return mask.to(points.device)
 
 
 ###############################

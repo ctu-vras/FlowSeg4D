@@ -33,6 +33,7 @@ association:
   use_feat: False
 
 nuscenes:
+  ego_vehicle: [4.084, 1.730, 1.562]
   fore_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   config_downstream: ScaLR/configs/downstream/nuscenes/WI_768_linprob.yaml
   bbox_dataset: {0: [2.53, 0.50], 1: [1.70, 0.60], 2: [10.5, 2.94], 3: [4.63, 1.97], 4: [6.37, 2.85], 5: [2.11, 0.77], 6: [0.73, 0.67], 7: [0.41, 0.41], 8: [12.29, 2.90], 9: [6.93, 2.51]}
@@ -48,6 +49,7 @@ nuscenes:
              9: [10, 3]} # truck: assuming bus, constr_veh, truck and trailer are 3x10m
 
 semantic_kitti:
+  ego_vehicle: [4.775, 1.820, 1.516]
   fore_classes: [0, 1, 2, 3, 4, 5, 6, 7]
   config_downstream: ScaLR/configs/downstream/semantic_kitti/WI_768_linprob.yaml
   bbox_dataset: {0: [3.9, 1.6], 1: [1.76, 0.6], 2: [2.11, 0.77], 3: [6.93, 2.51], 4: [10.5, 2.94], 5: [0.8, 0.6], 6: [1.76, 0.6], 7: [2.11, 0.77]}
@@ -61,16 +63,15 @@ semantic_kitti:
              7: [2.2, 0.95]} # motorcyclist: motorcycle
 
 pone:
-  fore_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-  config_downstream: ScaLR/configs/downstream/nuscenes/WI_768_linprob.yaml
-  bbox_dataset: {0: [2.53, 0.50], 1: [1.70, 0.60], 2: [10.5, 2.94], 3: [4.63, 1.97], 4: [6.37, 2.85], 5: [2.11, 0.77], 6: [0.73, 0.67], 7: [0.41, 0.41], 8: [12.29, 2.90], 9: [6.93, 2.51]}
-  bbox_web: {0: [2., 0.5], # barrier: inferred
+  ego_vehicle: [4.767, 1.832, 1.456]
+  fore_classes: [0, 1, 2, 3, 4, 5, 6, 7]
+  config_downstream: ScaLR/configs/downstream/semantic_kitti/WI_768_linprob.yaml
+  bbox_dataset: {0: [3.9, 1.6], 1: [1.76, 0.6], 2: [2.11, 0.77], 3: [6.93, 2.51], 4: [10.5, 2.94], 5: [0.8, 0.6], 6: [1.76, 0.6], 7: [2.11, 0.77]}
+  bbox_web: {0: [4.4, 1.8], # car: https://www.motor1.com/news/707996/vehicles-larger-than-ever-usa-europe
              1: [1.75, 0.61], # bicycle: https://thebestbikelock.com/wp-content/uploads/2020/01/one-bike-average-size.gif
-             2: [10, 3], # bus: assuming bus, constr_veh, truck and trailer are 3x10m
-             3: [4.75, 1.92], # car: https://www.finn.com/en-DE/campaign/supersized
-             4: [10, 3], # construction_vehicle: assuming bus, constr_veh, truck and trailer are 3x10m
-             5: [2.2, 0.95], # motorcycle: https://carparkjourney.wordpress.com/2013/07/16/what-is-the-average-size-of-a-motorbike/
-             6: [0.93, 0.93], # person: RLSP arm span height: https://pubmed.ncbi.nlm.nih.gov/25063245/  average height in germany https://en.wikipedia.org/wiki/Average_human_height_by_country 175. We get 175*1.06/2
-             7: [0.4, 0.4], # traffic_cone: found on the internet that cones are ~40cm large at the bottom
-             8: [10, 3], # trailer: assuming bus, constr_veh, truck and trailer are 3x10m
-             9: [10, 3]} # truck: assuming bus, constr_veh, truck and trailer are 3x10m
+             2: [2.2, 0.95], # motorcycle: https://carparkjourney.wordpress.com/2013/07/16/what-is-the-average-size-of-a-motorbike/
+             3: [10, 3], # truck
+             4: [10, 3], # other-vehicle
+             5: [0.94, 0.94], # person: RLSP arm span height: https://pubmed.ncbi.nlm.nih.gov/25063245/  average height in germany https://en.wikipedia.org/wiki/Average_human_height_by_country 179. We get 179*1.06/2
+             6: [1.75, 0.61], # bicyclist: bicycle
+             7: [2.2, 0.95]} # motorcyclist: motorcycle
