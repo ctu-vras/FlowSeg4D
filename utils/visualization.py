@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from utils.misc import load_config
 
-MAX_INST = 20
+MAX_INST = 75
 
 
 def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
@@ -57,7 +57,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
 
         # Assign colors based on labels
         if config["colors"] is None or config["instances"]:
-            colors = plt.get_cmap("tab20")((labels % MAX_INST) / MAX_INST)
+            colors = plt.get_cmap("hsv")((labels % MAX_INST) / MAX_INST)
             colors[labels == 0] = 0
         else:
             colors = config["colors"][labels]

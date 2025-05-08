@@ -1,40 +1,46 @@
 pone:
   colors: [
-      [255, 0, 0], # barrier
+      [255, 0, 0], # car
       [0, 255, 0], # bicycle
-      [0, 0, 255], # bus
-      [255, 255, 0], # car
-      [255, 0, 255], # construction_vehicle
-      [0, 255, 255], # motorcycle
-      [255, 165, 0], # pedestrian
-      [128, 0, 128], # traffic_cone
-      [0, 128, 0], # trailer
-      [255, 192, 203], # truck
-      [128, 128, 128], # driveable_surface
-      [165, 42, 42], # other_flat
+      [0, 0, 255], # motorcycle
+      [255, 255, 0], # truck
+      [128, 0, 128], # other-vehicle
+      [255, 165, 0], # person
+      [0, 255, 255], # bicyclist
+      [255, 0, 255], # motorcyclist
+      [128, 128, 128], # road
+      [255, 192, 203], # parking
       [211, 211, 211], # sidewalk
-      [34, 139, 34], # terrain
-      [255, 215, 0], # manmade
-      [173, 255, 47], # vegetation
+      [165, 42, 42], # other-ground
+      [255, 215, 0], # building
+      [139, 69, 19], # fence
+      [34, 139, 34], # vegetation
+      [160, 82, 45], # trunk
+      [173, 255, 47], # terrain
+      [112, 128, 144], # pole
+      [220, 20, 60], # traffic-sign
     ]
   names:
     [
-      "barrier",
-      "bicycle",
-      "bus",
       "car",
-      "construction vehicle",
+      "bicycle",
       "motorcycyle",
-      "pedestrian",
-      "traffic cone",
-      "trailer",
       "truck",
-      "driveable surface",
-      "other flat",
+      "other vehicle",
+      "person",
+      "bicyclist",
+      "motorcyclist",
+      "road",
+      "parking",
       "sidewalk",
-      "terrain",
-      "manmade",
+      "other ground",
+      "building",
+      "fence",
       "vegetation",
+      "trunk",
+      "terrain",
+      "pole",
+      "traffic sign",
     ]
   fps: 10
 
@@ -76,7 +82,7 @@ nuscenes:
       "manmade",
       "vegetation",
     ]
-  fps: 10
+  fps: 2
 
 semantic_kitti:
   colors: [
