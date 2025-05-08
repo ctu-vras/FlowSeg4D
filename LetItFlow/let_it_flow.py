@@ -46,6 +46,7 @@ class SC2_KNN_cluster_aware(torch.nn.Module):
     use_normals : Whether to use surface estimation for neighborhood construction
     d_thre : constant for working with the displacements as percentual statistics, we use value from https://github.com/ZhiChen902/SC2-PCR
     """
+
     def __init__(self, pc1, K=16, d_thre=0.03):
         super().__init__()
         self.d_thre = d_thre
@@ -103,25 +104,29 @@ def center_rigidity_loss(pc1, flow, cluster_ids):
     return rigidity_loss
 
 
-def initial_clustering(src_frame, dst_frame, device, eps=0.3, min_samples=1, z_scale=0.5):
+def initial_clustering(
+    src_frame, dst_frame, device, eps=0.3, min_samples=1, z_scale=0.5
+):
     src_frame = np.concatenate([src_frame, np.zeros((src_frame.shape[0], 1))], axis=1)
     dst_frame = np.concatenate([dst_frame, np.ones((dst_frame.shape[0], 1))], axis=1)
 
     to_cluster_pc1 = np.concatenate([src_frame, dst_frame], axis=0)
-    scaled_cluster_pc1 = to_cluster_pc1[:,:3] * (1,1, z_scale)   # scale z-axis
+    scaled_cluster_pc1 = to_cluster_pc1[:, :3] * (1, 1, z_scale)  # scale z-axis
 
     # Spatio-temporal clustering with fixed temporal range
-    clusters = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(scaled_cluster_pc1[:,:3])
+    clusters = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(
+        scaled_cluster_pc1[:, :3]
+    )
 
-    p1 = to_cluster_pc1[to_cluster_pc1[:,3] == 0][:,:3]
-    p2 = to_cluster_pc1[to_cluster_pc1[:,3] == 1][:,:3]
+    p1 = to_cluster_pc1[to_cluster_pc1[:, 3] == 0][:, :3]
+    p2 = to_cluster_pc1[to_cluster_pc1[:, 3] == 1][:, :3]
 
-    c1 = clusters[to_cluster_pc1[:,3] == 0]
-    c2 = clusters[to_cluster_pc1[:,3] == 1]
-    
+    c1 = clusters[to_cluster_pc1[:, 3] == 0]
+    c2 = clusters[to_cluster_pc1[:, 3] == 1]
+
     p1 = torch.tensor(p1, device=device, dtype=torch.float32)
     p2 = torch.tensor(p2, device=device, dtype=torch.float32)
-    c1 = torch.tensor(c1, device=device)    # clusters are without batch dim
+    c1 = torch.tensor(c1, device=device)  # clusters are without batch dim
     c2 = torch.tensor(c2, device=device)
 
     return p1, p2, c1, c2
