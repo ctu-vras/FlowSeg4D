@@ -418,7 +418,6 @@ class Instance_data:
     cl_id: int
     life: int
     center: torch.Tensor
-    # bbox : torch.Tensor
     feature: torch.Tensor
 
     def __repr__(self):

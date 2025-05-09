@@ -71,6 +71,8 @@ class EvalPQ4D:
         union = tp + fp + fn
 
         num_classes = np.count_nonzero(union)
+        num_classes = num_classes if num_classes > 0 else 1
+        num_classes = num_classes if num_classes < self.num_classes else self.num_classes
 
         iou = intersection / np.maximum(union, self.eps)
         iou_mean = np.sum(iou) / num_classes

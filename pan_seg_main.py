@@ -121,15 +121,14 @@ if __name__ == "__main__":
     config_model = load_config(config_panseg[args.dataset]["config_downstream"])
 
     process_configs(args, config_panseg, config_pretrain, config_model)
+    if args.ablation is not None:
+        config_panseg["association"]["life"] = args.ablation
     config_msg = print_config(args, config_panseg)
     if args.save_path is not None:
         if not os.path.exists(args.save_path):
             os.makedirs(args.save_path)
         with open(f"{args.save_path}/config.txt", "w") as f:
             f.write(config_msg)
-
-    if args.ablation is not None:
-        config_panseg["association"]["life"] = args.ablation
 
     # Build network
     model = Segmenter(
