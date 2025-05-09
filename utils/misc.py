@@ -105,12 +105,13 @@ def print_config(args: argparse.Namespace, config: dict) -> str:
         msg += f"  bbox source: {source}\n"
         msg += f"  bbox: {config[f'{args.dataset}'][f'bbox_{source}']}\n"
 
-    msg += f"Association:\n"
+    msg += "Association: " + ("short" if args.short else "long") + "\n"
     msg += f"  max distance: {config['association']['max_dist']}\n"
     if not args.short or (args.short and config["association"]["use_feat"]):
         msg += f"  max feature distance: {config['association']['max_feat']}\n"
     if not args.short:
         msg += f"  life: {config['association']['life']}\n"
+        msg += f"  alpha: {config['association']['alpha']}\n"
 
     msg += f"Checkpoint: {args.pretrained_ckpt}\n"
 
@@ -153,12 +154,13 @@ def print_config_cont(args: argparse.Namespace, config: dict) -> str:
         msg += f"  bbox source: {source}\n"
         msg += f"  bbox: {config[f'{args.dataset}'][f'bbox_{source}']}\n"
 
-    msg += f"Association:\n"
+    msg += f"Association: " + ("short" if args.short else "long") + "\n"
     msg += f"  max distance: {config['association']['max_dist']}\n"
     if not args.short or (args.short and config["association"]["use_feat"]):
         msg += f"  max feature distance: {config['association']['max_feat']}\n"
     if not args.short:
         msg += f"  life: {config['association']['life']}\n"
+        msg += f"  alpha: {config['association']['alpha']}\n"
 
     if args.save_path is not None:
         msg += f"Save path: {args.save_path}\n"
@@ -172,7 +174,7 @@ def print_config_cont(args: argparse.Namespace, config: dict) -> str:
     msg += f"Verbose: {args.verbose}\n"
 
     print("\nConfiguration:")
-    print("=" * 20)
+    print("=" * 14)
     print(msg)
     return msg
 

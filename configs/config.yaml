@@ -17,6 +17,7 @@ association:
   max_feat: 0.5
   life: 5
   use_feat: False
+  alpha: 0.5
 
 nuscenes:
   ego_vehicle: [4.084, 1.730, 1.562]

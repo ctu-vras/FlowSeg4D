@@ -74,12 +74,23 @@ def parse_args():
         help="Run testing split of dataset",
     )
     parser.add_argument(
+        "--short",
+        action="store_true",
+        default=False,
+        help="Do not use long association",
+    )
+    parser.add_argument(
+        "--ablation",
+        type=int,
+        default=None,
+        help="Value of ablation parameter"
+    )
+    parser.add_argument(
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
     )
     parser.add_argument(
         "--save_path", type=str, default=None, help="Path to save segmentation files"
     )
-    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument(
         "--verbose", action="store_true", default=False, help="Verbose debug messages"
     )
@@ -89,12 +100,7 @@ def parse_args():
     parser.add_argument(
         "--flow", action="store_true", default=False, help="Use flow estimation"
     )
-    parser.add_argument(
-        "--short",
-        action="store_true",
-        default=False,
-        help="Do not use long association",
-    )
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
 
     return parser.parse_args()
 
@@ -121,6 +127,9 @@ if __name__ == "__main__":
             os.makedirs(args.save_path)
         with open(f"{args.save_path}/config.txt", "w") as f:
             f.write(config_msg)
+
+    if args.ablation is not None:
+        config_panseg["association"]["life"] = args.ablation
 
     # Build network
     model = Segmenter(
@@ -245,10 +254,12 @@ if __name__ == "__main__":
                 dst_pred = out_upsample[dst_id].argmax(dim=1).unsqueeze(1)
             else:
                 e_idx = s_idx + batch["upsample"][src_id].shape[0]
-                src_pred = labels[s_idx:e_idx].to(device)
+                src_pred = labels[s_idx:e_idx].to(device).unsqueeze(1)
+                src_pred[src_pred == 255] = -1
                 dst_pred = labels[
                     e_idx : e_idx + batch["upsample"][dst_id].shape[0]
-                ].to(device)
+                ].to(device).unsqueeze(1)
+                dst_pred[dst_pred == 255] = -1
                 s_idx = e_idx
 
             # clustering

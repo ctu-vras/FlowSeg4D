@@ -11,7 +11,7 @@ def association(
     points_t2: torch.Tensor,
     config: dict,
     prev_ind: Optional[torch.Tensor] = None,
-    ind_cache: Optional[Obj_cache] = None,
+    obj_cache: Optional[Obj_cache] = None,
     flow: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -24,7 +24,7 @@ def association(
         points_t2 (torch.Tensor): Data for time t+1, ego compensated xyz + features + semantic class + cluster id.
         config (dict): Configuration dictionary containing parameters for association.
         prev_ind (Optional[torch.Tensor]): Previous indices for association.
-        ind_cache (Optional[dict]): Cache for previous indices.
+        obj_cache (Optional[dict]): Cache for previous indices.
         flow (Optional[torch.Tensor]): Flow tensor for adjusting point positions.
 
     Returns:
@@ -37,7 +37,7 @@ def association(
         points_t2.shape[0], dtype=torch.int32, device=points_t2.device
     )
 
-    curr_id = 1 if ind_cache is None else ind_cache.max_id + 1
+    curr_id = 1 if obj_cache is None else obj_cache.max_id + 1
 
     if flow is not None:
         points_t1[:, :3] += flow[:, :3]
@@ -187,6 +187,10 @@ def long_association(
         centers_t1, clusters_t1 = get_centers_for_class(points_t1, class_id)
         centers_t2, clusters_t2 = get_centers_for_class(points_t2, class_id)
 
+        # If no clusters are found, continue to the next class
+        if clusters_t1.numel() == 0 and clusters_t2.numel() == 0:
+            continue
+
         # If flow is provided, adjust the centers of t1
         if flow is not None:
             flow_t1, _ = get_centers_for_class(points_t1, class_id, flow)
@@ -197,10 +201,6 @@ def long_association(
         # Get the features for the current class
         features_t1, _ = get_centers_for_class(points_t1, class_id, points_t1[:, 3:-2])
         features_t2, _ = get_centers_for_class(points_t2, class_id, points_t2[:, 3:-2])
-
-        # If no clusters are found, continue to the next class
-        if clusters_t1.numel() == 0 and clusters_t2.numel() == 0:
-            continue
 
         class_mask_t1 = points_t1[:, -2] == class_id
         class_mask_t2 = points_t2[:, -2] == class_id
@@ -271,7 +271,6 @@ def long_association(
 
         # Calculate the association cost
         cost_dists = torch.cdist(centers_t1, centers_t2)
-        cost_dists[cost_dists > config["association"]["max_dist"]] = 1e8
 
         features_t1_n = features_t1 / (
             torch.norm(features_t1, dim=1, keepdim=True) + 1e-6
@@ -282,9 +281,11 @@ def long_association(
         cost_features = 1 - torch.matmul(
             features_t1_n, features_t2_n.T
         )  # cosine similarity
-        cost_features[cost_features > config["association"]["max_feat"]] = 1e8
 
-        assoc_cost = cost_dists + cost_features
+        assoc_cost = config["association"]["alpha"] * cost_dists + \
+                     (1 - config["association"]["alpha"]) * cost_features
+        assoc_cost[cost_features > config["association"]["max_feat"]] = 1e8
+        assoc_cost[cost_dists > config["association"]["max_dist"]] = 1e8
 
         # associate using hungarian matching
         row_ind, col_ind = linear_sum_assignment(assoc_cost.cpu().numpy())
