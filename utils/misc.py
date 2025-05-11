@@ -289,6 +289,8 @@ def transform_pointcloud(
     points_tr = torch.cat(
         (points, torch.ones((points.shape[0], 1), device=points.device)), axis=1
     )
+    if transform_matrix.dtype != points_tr.dtype:
+        transform_matrix = transform_matrix.to(points_tr.dtype)
     points_tr = torch.mm(transform_matrix, points_tr.T).T
 
     return points_tr[:, :3]

@@ -209,7 +209,7 @@ class PanSegmenter:
             "cell_ind": torch.from_numpy(cell_ind[None]).to(self.device),
             "occupied_cells": torch.ones(feat.shape[-1]).unsqueeze(0).to(self.device),
             "upsample": torch.from_numpy(upsample).to(self.device),
-            "ego": torch.from_numpy(data["ego"].astype(np.float32)).to(self.device),
+            "ego": torch.from_numpy(data["ego"]).to(self.device),
             "scene": data["scene"],
             "filename": data["filename"],
         }
@@ -391,18 +391,22 @@ if __name__ == "__main__":
     args.batch_size = 1
 
     args.dataset = args.dataset.lower()
-    if args.dataset not in ["pone", "semantic_kiti"]:
+    if args.dataset not in ["pone", "semantic_kitti"]:
         raise ValueError(f"Dataset {args.dataset} not available.")
+
     if args.dataset == "pone":
         args.mean_int = 0.391358
         args.std_int = 0.151813
+    elif args.dataset == "semantic_kitti":
+        args.mean_int = 0.28613698
+        args.std_int = 0.14090556
 
     # Initialize segmenter
     segmenter = PanSegmenter(args)
 
     try:
-        for item in sorted(os.listdir(args.path_dataset)):
-            if args.dataset == "pone":
+        for i, item in enumerate(sorted(os.listdir(args.path_dataset))):
+            if args.dataset == "pone":  # load PONE dataset
                 file = np.load(os.path.join(args.path_dataset, item), allow_pickle=True)
                 scene_name = item.split("/")[-1][:-9]
                 scene = {"name": scene_name, "token": scene_name}
@@ -412,6 +416,27 @@ if __name__ == "__main__":
                     "scene": scene,
                     "filename": item,
                 }
+            elif args.dataset == "semantic_kitti":  # load SemanticKITTI dataset
+                pcd = np.fromfile(
+                    os.path.join(args.path_dataset, item), dtype=np.float32
+                ).reshape(-1, 4)
+                poses = np.loadtxt(
+                    os.path.join(args.path_dataset, "../poses.txt")
+                ).reshape(-1, 3, 4)
+                pose_t = np.vstack([poses[i], np.array([0, 0, 0, 1])])
+                pose_0 = np.vstack([poses[0], np.array([0, 0, 0, 1])])
+                scene_name = item.split("/")[-1]
+                scene = {"name": scene_name, "token": scene_name}
+                data = {
+                    "points": pcd,
+                    "ego": (np.linalg.inv(pose_0) @ pose_t).astype(np.float32),
+                    "scene": scene,
+                    "filename": item,
+                }
+            else:
+                raise ValueError(f"Dataset {args.dataset} not available.")
+
+            # Call segmenter
             _, _ = segmenter(data)
     except KeyboardInterrupt:
         print("Keyboard interrupt, exiting...")
