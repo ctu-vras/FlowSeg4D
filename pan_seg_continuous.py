@@ -52,13 +52,13 @@ class PanSegmenter:
         )
 
         fov_xyz = config_model["waffleiron"]["fov_xyz"]
-        assert len(fov_xyz[0]) == len(
-            fov_xyz[1]
-        ), "Min and Max FOV must have the same length."
+        assert len(fov_xyz[0]) == len(fov_xyz[1]), (
+            "Min and Max FOV must have the same length."
+        )
         for i, (min, max) in enumerate(zip(*fov_xyz)):
-            assert (
-                min < max
-            ), f"Field of view: min ({min}) < max ({max}) is expected on dimension {i}."
+            assert min < max, (
+                f"Field of view: min ({min}) < max ({max}) is expected on dimension {i}."
+            )
         self.fov_xyz = np.concatenate([np.array(f)[None] for f in fov_xyz], axis=0)
         self._crop_to_fov = tr.Crop(dims=(0, 1, 2), fov=fov_xyz)
 
@@ -109,6 +109,7 @@ class PanSegmenter:
 
         # Set device
         device = "cpu"
+        torch.set_default_dtype(torch.float64)
         if torch.cuda.is_available():
             if args.gpu is not None:
                 device = f"cuda:{args.gpu}"
@@ -116,12 +117,16 @@ class PanSegmenter:
                 device = "cuda"
         elif torch.mps.is_available():
             device = "mps"
+            torch.set_default_dtype(torch.float32)
         self.device = torch.device(device)
+        if args.verbose:
+            print(f"Using device: {device}")
 
         # Set model to evaluation mode
         self.model.load_state_dict(new_ckpt)
         self.model = self.model.to(device)
-        self.model.compile()
+        if torch.cuda.is_available():
+            self.model.compile()
         self.model.eval()
 
         # Initialize
@@ -178,7 +183,7 @@ class PanSegmenter:
 
     def _preprocess(self, data):
         # Prepare input feature
-        pc_orig = self._prepare_input_features(data['points'])
+        pc_orig = self._prepare_input_features(data["points"])
 
         # Voxelization
         pc, _ = self._downsample(pc_orig, None)
@@ -204,7 +209,7 @@ class PanSegmenter:
             "cell_ind": torch.from_numpy(cell_ind[None]).to(self.device),
             "occupied_cells": torch.ones(feat.shape[-1]).unsqueeze(0).to(self.device),
             "upsample": torch.from_numpy(upsample).to(self.device),
-            "ego": torch.from_numpy(data['ego']).to(self.device).float(),
+            "ego": torch.from_numpy(data["ego"].astype(np.float32)).to(self.device),
             "scene": data["scene"],
             "filename": data["filename"],
         }
@@ -216,7 +221,12 @@ class PanSegmenter:
 
         # network inputs
         data = self._preprocess(data)
-        net_inputs = (data["feat"], data["cell_ind"], data["occupied_cells"], data["neighbors_emb"])
+        net_inputs = (
+            data["feat"],
+            data["cell_ind"],
+            data["occupied_cells"],
+            data["neighbors_emb"],
+        )
         times.append(time.time())
 
         # get semantic class prediction
@@ -233,9 +243,7 @@ class PanSegmenter:
         src_features = tokens[0, :, data["upsample"]].T
 
         # ego motion compensation
-        src_points_ego = transform_pointcloud(
-            src_points, data["ego"]
-        )
+        src_points_ego = transform_pointcloud(src_points, data["ego"])
 
         # get semantic class
         src_pred = out_upsample.unsqueeze(1)
@@ -279,7 +287,9 @@ class PanSegmenter:
                 None,
             )
         self.prev_ind = ind_src
-        self.obj_cache.max_id = int(max(self.obj_cache.max_id, self.prev_ind.max(), ind_src.max()))
+        self.obj_cache.max_id = int(
+            max(self.obj_cache.max_id, self.prev_ind.max(), ind_src.max())
+        )
 
         self.prev_points = src_points
         self.prev_scene = data["scene"]

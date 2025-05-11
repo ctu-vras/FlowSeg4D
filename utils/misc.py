@@ -350,7 +350,7 @@ def get_centers_for_class(
                 ]
             )
 
-    return centers.double(), clusters
+    return centers, clusters
 
 
 def get_ego_vehicle_mask(points: torch.Tensor, config: dict) -> torch.Tensor:
