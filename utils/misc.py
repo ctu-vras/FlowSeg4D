@@ -165,9 +165,7 @@ def print_config_cont(args: argparse.Namespace, config: dict) -> str:
     if args.save_path is not None:
         msg += f"Save path: {args.save_path}\n"
 
-    msg += f"GPU: {torch.cuda.is_available()}\n"
-    if args.gpu:
-        msg += f"  GPU ID: {args.gpu}\n"
+    msg += f"Device: {args.gpu}\n"
 
     msg += f"Checkpoint: {args.pretrained_ckpt}\n"
 

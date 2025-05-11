@@ -25,6 +25,20 @@ class PanSegmenter:
     def __init__(self, args):
         self.args = args
 
+        # Set device
+        device = "cpu"
+        torch.set_default_dtype(torch.float64)
+        if torch.cuda.is_available():
+            if args.gpu is not None:
+                device = f"cuda:{args.gpu}"
+            else:
+                device = "cuda"
+        elif torch.mps.is_available():
+            device = "mps"
+            torch.set_default_dtype(torch.float32)
+        self.device = torch.device(device)
+        args.gpu = device
+
         # Load config files
         config_panseg = load_config("configs/config.yaml")
         config_pretrain = load_config(args.config_pretrain)
@@ -106,21 +120,6 @@ class PanSegmenter:
                 new_ckpt[k[len("module.") :]] = ckpt[k]
             else:
                 new_ckpt[k] = ckpt[k]
-
-        # Set device
-        device = "cpu"
-        torch.set_default_dtype(torch.float64)
-        if torch.cuda.is_available():
-            if args.gpu is not None:
-                device = f"cuda:{args.gpu}"
-            else:
-                device = "cuda"
-        elif torch.mps.is_available():
-            device = "mps"
-            torch.set_default_dtype(torch.float32)
-        self.device = torch.device(device)
-        if args.verbose:
-            print(f"Using device: {device}")
 
         # Set model to evaluation mode
         self.model.load_state_dict(new_ckpt)
