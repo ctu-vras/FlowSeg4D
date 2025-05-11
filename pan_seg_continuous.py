@@ -3,11 +3,13 @@ import time
 import argparse
 
 import torch
+import numpy as np
+from scipy.spatial import KDTree
 
 from WaffleIron.waffleiron import Segmenter
+import WaffleIron.utils.transforms as tr
 
 from utils.clustering import Clusterer
-from utils.dataloaders import get_dataloader, get_datasets
 from utils.association import association, long_association
 from utils.misc import (
     Obj_cache,
@@ -29,14 +31,47 @@ class PanSegmenter:
         config_model = load_config(config_panseg[args.dataset]["config_downstream"])
 
         process_configs(args, config_panseg, config_pretrain, config_model)
-        config_msg = print_config_cont(args, config_panseg)
+        self.config_msg = print_config_cont(args, config_panseg)
         if args.save_path is not None:
             if not os.path.exists(args.save_path):
                 os.makedirs(args.save_path)
             with open(f"{args.save_path}/config.txt", "w") as f:
-                f.write(config_msg)
+                f.write(self.config_msg)
 
         self.config = config_panseg
+
+        # Init preprocessing
+        self.input_feat = config_model["embedding"]["input_feat"]
+        self.mean_int = args.mean_int
+        self.std_int = args.std_int
+
+        self._downsample = tr.Voxelize(
+            dims=(0, 1, 2),
+            voxel_size=config_model["embedding"]["voxel_size"],
+            random=False,
+        )
+
+        fov_xyz = config_model["waffleiron"]["fov_xyz"]
+        assert len(fov_xyz[0]) == len(
+            fov_xyz[1]
+        ), "Min and Max FOV must have the same length."
+        for i, (min, max) in enumerate(zip(*fov_xyz)):
+            assert (
+                min < max
+            ), f"Field of view: min ({min}) < max ({max}) is expected on dimension {i}."
+        self.fov_xyz = np.concatenate([np.array(f)[None] for f in fov_xyz], axis=0)
+        self._crop_to_fov = tr.Crop(dims=(0, 1, 2), fov=fov_xyz)
+
+        grids_shape = config_model["waffleiron"]["grids_size"]
+        dim_proj = config_model["waffleiron"]["dim_proj"]
+        assert len(grids_shape) == len(dim_proj)
+        self.dim_proj = dim_proj
+        self.grids_shape = [np.array(g) for g in grids_shape]
+        self.lut_axis_plane = {0: (1, 2), 1: (0, 2), 2: (0, 1)}
+
+        num_neighbors = config_model["embedding"]["neighbors"]
+        assert num_neighbors > 0
+        self.num_neighbors = num_neighbors
 
         # Build network
         self.model = Segmenter(
@@ -79,6 +114,8 @@ class PanSegmenter:
                 device = f"cuda:{args.gpu}"
             else:
                 device = "cuda"
+        elif torch.mps.is_available():
+            device = "mps"
         self.device = torch.device(device)
 
         # Set model to evaluation mode
@@ -94,15 +131,92 @@ class PanSegmenter:
         self.clusterer = Clusterer(config_panseg)
         self.obj_cache = Obj_cache(config_model["classif"]["nb_class"])
 
+    def _get_occupied_2d_cells(self, pc):
+        """Return mapping between 3D point and corresponding 2D cell"""
+        cell_ind = []
+        for dim, grid in zip(self.dim_proj, self.grids_shape):
+            # Get plane of which to project
+            dims = self.lut_axis_plane[dim]
+            # Compute grid resolution
+            res = (self.fov_xyz[1, dims] - self.fov_xyz[0, dims]) / grid[None]
+            # Shift and quantize point cloud
+            pc_quant = ((pc[:, dims] - self.fov_xyz[0, dims]) / res).astype("int")
+            # Check that the point cloud fits on the grid
+            min, max = pc_quant.min(0), pc_quant.max(0)
+            assert min[0] >= 0 and min[1] >= 0, print(
+                "Some points are outside the FOV:", pc[:, :3].min(0), self.fov_xyz
+            )
+            assert max[0] < grid[0] and max[1] < grid[1], print(
+                "Some points are outside the FOV:", pc[:, :3].min(0), self.fov_xyz
+            )
+            # Transform quantized coordinates to cell indices for projection on 2D plane
+            temp = pc_quant[:, 0] * grid[1] + pc_quant[:, 1]
+            cell_ind.append(temp[None])
+        return np.vstack(cell_ind)
+
+    def _prepare_input_features(self, pc_orig):
+        # Concatenate desired input features to coordinates
+        pc = [pc_orig[:, :3]]  # Initialize with coordinates
+        for type in self.input_feat:
+            if type == "intensity":
+                intensity = pc_orig[:, 3:]
+                intensity = (intensity - self.mean_int) / self.std_int
+                pc.append(intensity)
+            elif type == "height":
+                pc.append(pc_orig[:, 2:3])
+            elif type == "radius":
+                r_xyz = np.linalg.norm(pc_orig[:, :3], axis=1, keepdims=True)
+                pc.append(r_xyz)
+            elif type == "xyz":
+                xyz = pc_orig[:, :3]
+                pc.append(xyz)
+            elif type == "constant":
+                pc.append(np.ones((pc_orig.shape[0], 1)))
+            else:
+                raise ValueError(f"Unknown feature: {type}")
+        return np.concatenate(pc, 1)
+
+    def _preprocess(self, data):
+        # Prepare input feature
+        pc_orig = self._prepare_input_features(data['points'])
+
+        # Voxelization
+        pc, _ = self._downsample(pc_orig, None)
+
+        # Crop to fov
+        pc, _ = self._crop_to_fov(pc, None)
+        feat = pc[:, 3:].T
+
+        # For each point, get index of corresponding 2D cells on projected grid
+        cell_ind = self._get_occupied_2d_cells(pc)
+
+        # Get neighbors for point embedding layer providing tokens to waffleiron backbone
+        kdtree = KDTree(pc[:, :3])
+        assert pc.shape[0] > self.num_neighbors
+        _, neighbors_emb = kdtree.query(pc[:, :3], k=self.num_neighbors + 1)
+
+        # Nearest neighbor interpolation to undo cropping & voxelisation
+        _, upsample = kdtree.query(pc_orig[:, :3], k=1)
+
+        out = {
+            "feat": torch.from_numpy(feat[None]).to(self.device),
+            "neighbors_emb": torch.from_numpy(neighbors_emb.T[None]).to(self.device),
+            "cell_ind": torch.from_numpy(cell_ind[None]).to(self.device),
+            "occupied_cells": torch.ones(feat.shape[-1]).unsqueeze(0).to(self.device),
+            "upsample": torch.from_numpy(upsample).to(self.device),
+            "ego": torch.from_numpy(data['ego']).to(self.device).float(),
+            "scene": data["scene"],
+            "filename": data["filename"],
+        }
+
+        return out
+
     def __call__(self, data):
         times = [time.time()]
 
         # network inputs
-        feat = data["feat"].to(self.device)
-        cell_ind = data["cell_ind"].to(self.device)
-        occupied_cell = data["occupied_cells"].to(self.device)
-        neighbors_emb = data["neighbors_emb"].to(self.device)
-        net_inputs = (feat, cell_ind, occupied_cell, neighbors_emb)
+        data = self._preprocess(data)
+        net_inputs = (data["feat"], data["cell_ind"], data["occupied_cells"], data["neighbors_emb"])
         times.append(time.time())
 
         # get semantic class prediction
@@ -112,17 +226,15 @@ class PanSegmenter:
         times.append(time.time())
 
         # upsample to original resolution
-        data["upsample"] = data["upsample"][0].to(self.device)
         out_upsample = out[data["upsample"]]
-        times.append(time.time())
 
         # get instance prediction
-        src_points = feat[0, 1:4, data["upsample"]].T
+        src_points = data["feat"][0, 1:4, data["upsample"]].T
         src_features = tokens[0, :, data["upsample"]].T
 
         # ego motion compensation
         src_points_ego = transform_pointcloud(
-            src_points, data["ego"][0].to(self.device)
+            src_points, data["ego"]
         )
 
         # get semantic class
@@ -142,7 +254,7 @@ class PanSegmenter:
         ind_src = None
         if (
             self.prev_scene is None
-            or not self.prev_scene["token"] == data["scene"][0]["token"]
+            or not self.prev_scene["token"] == data["scene"]["token"]
         ):
             self.prev_ind = None
             self.obj_cache.reset()
@@ -170,28 +282,35 @@ class PanSegmenter:
         self.obj_cache.max_id = int(max(self.obj_cache.max_id, self.prev_ind.max(), ind_src.max()))
 
         self.prev_points = src_points
-        self.prev_scene = data["scene"][0]
+        self.prev_scene = data["scene"]
         times.append(time.time())
 
         if args.verbose:
             print(
-                f"Total time: {times[5] - times[0]:.2f} s\n"
+                f"Total time: {times[-1] - times[0]:.2f} s\n"
                 f"  SemSeg data prep: {times[1] - times[0]:.2f} | "
                 f"Semantic segmentation: {times[2] - times[1]:.2f} | "
-                f"Upsample: {times[3] - times[2]:.2f} | "
-                f"InsSeg data prep: {times[4] - times[3]:.2f} | "
-                f"Instance segmentation: {times[5] - times[4]:.2f} | "
+                f"InsSeg data prep: {times[3] - times[2]:.2f} | "
+                f"Instance segmentation: {times[4] - times[3]:.2f} | "
             )
+
+        src_pred = src_pred.cpu().numpy().squeeze()
+        ind_src = ind_src.cpu().numpy()
 
         # save segmentation files
         if args.save_path is not None:
             save_data(
                 args.save_path,
-                data["scene"][0]["name"],
-                data["filename"][0],
-                src_pred.cpu().numpy().squeeze(),
-                ind_src.cpu().numpy(),
+                data["scene"]["name"],
+                data["filename"],
+                src_pred,
+                ind_src,
             )
+
+        return src_pred, ind_src
+
+    def __str__(self):
+        return f"PanSegmenter({self.config_msg})"
 
 
 def parse_args():
@@ -200,13 +319,13 @@ def parse_args():
         "--dataset",
         type=str,
         help="Dataset name",
-        default="nuscenes",
+        default="pone",
     )
     parser.add_argument(
         "--path_dataset",
         type=str,
         help="Path to dataset",
-        default="/mnt/data/vras/data/nuScenes-panoptic/",
+        default="/mnt/personal/vlkjan6/PONE/val",
     )
     parser.add_argument(
         "--config_pretrain",
@@ -219,13 +338,13 @@ def parse_args():
         "--config_downstream",
         type=str,
         required=False,
-        default="ScaLR/configs/downstream/nuscenes/WI_768_linprob.yaml",
+        default="ScaLR/configs/downstream/semantic_kitti/WI_768_linprob.yaml",
         help="Path to model config downstream",
     )
     parser.add_argument(
         "--pretrained_ckpt",
         type=str,
-        default="ScaLR/logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/nuscenes/ckpt_last.pth",
+        default="ScaLR/logs/linear_probing/WI_768-DINOv2_ViT_L_14-NS_KI_PD/semantic_kitti/ckpt_last.pth",
         help="Path to pretrained ckpt",
     )
     parser.add_argument(
@@ -261,22 +380,29 @@ if __name__ == "__main__":
     args.flow = False
     args.batch_size = 1
 
-    # Load config files
-    config_panseg = load_config("configs/config.yaml")
-    config_pretrain = load_config(args.config_pretrain)
-    config_model = load_config(config_panseg[args.dataset]["config_downstream"])
-    process_configs(args, config_panseg, config_pretrain, config_model)
-
-    # Load dataset
-    dataset = get_datasets(config_model, args)
-    dataloader = get_dataloader(dataset, args)
+    args.dataset = args.dataset.lower()
+    if args.dataset not in ["pone", "semantic_kiti"]:
+        raise ValueError(f"Dataset {args.dataset} not available.")
+    if args.dataset == "pone":
+        args.mean_int = 0.391358
+        args.std_int = 0.151813
 
     # Initialize segmenter
     segmenter = PanSegmenter(args)
 
     try:
-        for i, batch in enumerate(dataloader):
-            segmenter(batch)
+        for item in sorted(os.listdir(args.path_dataset)):
+            if args.dataset == "pone":
+                file = np.load(os.path.join(args.path_dataset, item), allow_pickle=True)
+                scene_name = item.split("/")[-1][:-9]
+                scene = {"name": scene_name, "token": scene_name}
+                data = {
+                    "points": file["pcd"],
+                    "ego": file["odom"]["transformation"],
+                    "scene": scene,
+                    "filename": item,
+                }
+            _, _ = segmenter(data)
     except KeyboardInterrupt:
         print("Keyboard interrupt, exiting...")
     except Exception as e:
