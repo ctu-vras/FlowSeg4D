@@ -27,7 +27,6 @@ class PanSegmenter:
 
         # Set device
         device = "cpu"
-        torch.set_default_dtype(torch.float64)
         if torch.cuda.is_available():
             if args.gpu is not None:
                 device = f"cuda:{args.gpu}"
@@ -210,7 +209,7 @@ class PanSegmenter:
             "upsample": torch.from_numpy(upsample).to(self.device),
             "ego": torch.from_numpy(data["ego"]).to(self.device),
             "scene": data["scene"],
-            "filename": data["filename"],
+            "sample": data["sample"],
         }
 
         return out
@@ -311,7 +310,7 @@ class PanSegmenter:
             save_data(
                 args.save_path,
                 data["scene"]["name"],
-                data["filename"],
+                data["sample"],
                 src_pred,
                 ind_src,
             )
@@ -413,7 +412,7 @@ if __name__ == "__main__":
                     "points": file["pcd"],
                     "ego": file["odom"]["transformation"],
                     "scene": scene,
-                    "filename": item,
+                    "sample": item,
                 }
             elif args.dataset == "semantic_kitti":  # load SemanticKITTI dataset
                 pcd = np.fromfile(
@@ -430,7 +429,7 @@ if __name__ == "__main__":
                     "points": pcd,
                     "ego": (np.linalg.inv(pose_0) @ pose_t).astype(np.float32),
                     "scene": scene,
-                    "filename": item,
+                    "sample": item,
                 }
             else:
                 raise ValueError(f"Dataset {args.dataset} not available.")
