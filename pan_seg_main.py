@@ -81,7 +81,7 @@ def parse_args():
     )
     parser.add_argument(
         "--ablation",
-        type=int,
+        type=float,
         default=None,
         help="Value of ablation parameter"
     )

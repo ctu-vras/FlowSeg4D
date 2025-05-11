@@ -43,7 +43,7 @@ class Transformation:
 
     def __call__(self, pcloud, labels):
         if labels is None:
-            return pcloud if self.inplace else np.array(pcloud, copy=True)
+            return (pcloud, None) if self.inplace else (np.array(pcloud, copy=True), None)
 
         out = (
             (pcloud, labels)
@@ -158,7 +158,7 @@ class Crop(Transformation):
             )
             where = temp if where is None else where & temp
 
-        return pc[where], labels[where]
+        return pc[where], labels[where] if labels is not None else None
 
 
 class Voxelize(Transformation):
