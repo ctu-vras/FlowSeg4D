@@ -1,5 +1,4 @@
 import os
-import time
 import argparse
 
 import numpy as np
@@ -25,12 +24,12 @@ def parse_args():
         help="Directory containing label files.",
     )
     parser.add_argument(
+        "--dataset", type=str, default="pone", help="What dataset config to use"
+    )
+    parser.add_argument(
         "--instances",
         action="store_true",
         help="Flag to indicate if instance labels are used.",
-    )
-    parser.add_argument(
-        "--dataset", type=str, default="pone", help="What dataset config to use"
     )
     parser.add_argument(
         "--fps", type=int, default=None, help="Frames per second for visualization."

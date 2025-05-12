@@ -20,18 +20,18 @@ torch.set_num_threads(4)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Precompute flow")
+    parser.add_argument("--dataset", type=str, default="nuscenes", help="Dataset name")
     parser.add_argument(
-        "--dataroot", type=str, help="Path to NuScenes dataset", required=True
+        "--path_dataset", type=str, help="Path to NuScenes dataset", required=True
     )
     parser.add_argument(
         "--savedir", type=str, default=None, help="Path to output directory"
     )
-    parser.add_argument("--dataset", type=str, default="nuscenes", help="Dataset name")
-    parser.add_argument(
-        "--restart", type=int, default=None, help="Restart from specified scene number"
-    )
     parser.add_argument(
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
+    )
+    parser.add_argument(
+        "--restart", type=int, default=None, help="Restart from specified scene number"
     )
     parser.add_argument(
         "--frame",
@@ -85,7 +85,7 @@ def get_ego_motion_nuscenes(nusc, sample):
 if __name__ == "__main__":
     args = parse_args()
     if args.savedir is None:
-        args.savedir = args.dataroot
+        args.savedir = args.path_dataset
 
     config = load_config("configs/let-it-flow.yaml")
     device = "cpu"
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     if args.dataset == "nuscenes":
-        nusc = NuScenes(version="v1.0-trainval", dataroot=args.dataroot, verbose=True)
+        nusc = NuScenes(version="v1.0-trainval", dataroot=args.path_dataset, verbose=True)
 
         for scene in nusc.scene:
             if args.restart is not None:
@@ -131,7 +131,7 @@ if __name__ == "__main__":
                     "filename"
                 ]
                 src_labels = np.load(
-                    f"{args.dataroot}/{panoptic_path}", allow_pickle=True
+                    f"{args.path_dataset}/{panoptic_path}", allow_pickle=True
                 )["data"]
                 src_labels = (
                     torch.from_numpy(src_labels.astype(np.int32) // 1000)
@@ -143,7 +143,7 @@ if __name__ == "__main__":
                     "filename"
                 ]
                 dst_labels = np.load(
-                    f"{args.dataroot}/{panoptic_path}", allow_pickle=True
+                    f"{args.path_dataset}/{panoptic_path}", allow_pickle=True
                 )["data"]
                 dst_labels = (
                     torch.from_numpy(dst_labels.astype(np.int32) // 1000)
@@ -178,7 +178,7 @@ if __name__ == "__main__":
                 if scene < args.restart:
                     continue
             print(f"Processing scene {scene:02d}")
-            scene_dir = os.path.join(args.dataroot, f"dataset/sequences/{scene:02d}")
+            scene_dir = os.path.join(args.path_dataset, f"dataset/sequences/{scene:02d}")
             poses = np.loadtxt(os.path.join(scene_dir, "poses.txt")).reshape(-1, 3, 4)
             poses_h = np.zeros((poses.shape[0], 4, 4))
             poses_h[:, :3, :] = poses
