@@ -2,8 +2,8 @@
 ml Open3D/0.18.0-foss-2023a-CUDA-12.1.1
 
 ##### Create a virtual environment
-python3 -m venv dgx
-source dgx/bin/activate
+python3 -m venv run_mode
+source run_mode/bin/activate
 
 ##### Install dependencies
 pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --extra-index-url https://download.pytorch.org/whl/cu121

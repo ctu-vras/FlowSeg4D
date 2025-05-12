@@ -1,4 +1,4 @@
-# This file is covered by the LICENSE file in the root of this project.
+# Taken from: https://github.com/PRBonn/semantic-kitti-api
 labels: 
   0 : "unlabeled"
   1 : "outlier"
