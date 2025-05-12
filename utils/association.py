@@ -257,7 +257,7 @@ def long_association(
                 device=centers_t1.device,
             )
             if life_mask.any():
-                dists = torch.cdist(centers_t1_o, centers_t1[life_mask], p=2)
+                dists = torch.cdist(centers_t1_o.double(), centers_t1[life_mask].double(), p=2)
                 flow_dist = torch.norm(flow_t1, dim=1)
                 for i in range(len(centers_t1_o)):
                     min_dist_idx = dists[i].argmin()

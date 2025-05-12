@@ -423,7 +423,7 @@ if __name__ == "__main__":
                 ).reshape(-1, 3, 4)
                 pose_t = np.vstack([poses[i], np.array([0, 0, 0, 1])])
                 pose_0 = np.vstack([poses[0], np.array([0, 0, 0, 1])])
-                scene_name = item.split("/")[-1]
+                scene_name = args.path_dataset.split("/")[-2]
                 scene = {"name": scene_name, "token": scene_name}
                 data = {
                     "points": pcd,
