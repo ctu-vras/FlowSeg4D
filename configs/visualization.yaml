@@ -1,22 +1,22 @@
 pone:
   colors: [
-      [255, 0, 0], # car
-      [0, 255, 0], # bicycle
-      [0, 0, 255], # motorcycle
-      [255, 255, 0], # truck
+      [0, 0, 255], # car
+      [0, 255, 255], # bicycle
+      [255, 255, 0], # motorcycle
+      [255, 192, 203], # truck
       [128, 0, 128], # other-vehicle
-      [255, 165, 0], # person
-      [0, 255, 255], # bicyclist
-      [255, 0, 255], # motorcyclist
+      [255, 0, 255], # person
+      [0, 128, 128], # bicyclist
+      [128, 128, 0], # motorcyclist
       [128, 128, 128], # road
       [255, 192, 203], # parking
       [211, 211, 211], # sidewalk
       [165, 42, 42], # other-ground
       [255, 215, 0], # building
-      [139, 69, 19], # fence
-      [34, 139, 34], # vegetation
+      [255, 0, 0], # fence
+      [173, 255, 47], # vegetation
       [160, 82, 45], # trunk
-      [173, 255, 47], # terrain
+      [34, 139, 34], # terrain
       [112, 128, 144], # pole
       [220, 20, 60], # traffic-sign
     ]
@@ -24,7 +24,7 @@ pone:
     [
       "car",
       "bicycle",
-      "motorcycyle",
+      "motorcyle",
       "truck",
       "other vehicle",
       "person",
@@ -47,17 +47,17 @@ pone:
 nuscenes:
   colors: [
       [255, 0, 0], # barrier
-      [0, 255, 0], # bicycle
-      [0, 0, 255], # bus
-      [255, 255, 0], # car
-      [255, 0, 255], # construction_vehicle
-      [0, 255, 255], # motorcycle
-      [255, 165, 0], # pedestrian
-      [128, 0, 128], # traffic_cone
+      [0, 255, 255], # bicycle
+      [255, 255, 0], # bus
+      [0, 0, 255], # car
+      [128, 0, 128], # construction_vehicle
+      [255, 255, 0], # motorcycle
+      [255, 0, 255], # pedestrian
+      [220, 20, 60], # traffic_cone
       [0, 128, 0], # trailer
       [255, 192, 203], # truck
-      [128, 128, 128], # driveable_surface
-      [165, 42, 42], # other_flat
+      [128, 128, 128], # drivable_surface
+      [165, 42, 42], # other flat
       [211, 211, 211], # sidewalk
       [34, 139, 34], # terrain
       [255, 215, 0], # manmade
@@ -86,23 +86,23 @@ nuscenes:
 
 semantic_kitti:
   colors: [
-      [255, 0, 0], # car
-      [0, 255, 0], # bicycle
-      [0, 0, 255], # motorcycle
-      [255, 255, 0], # truck
+      [0, 0, 255], # car
+      [0, 255, 255], # bicycle
+      [255, 255, 0], # motorcycle
+      [255, 192, 203], # truck
       [128, 0, 128], # other-vehicle
-      [255, 165, 0], # person
-      [0, 255, 255], # bicyclist
-      [255, 0, 255], # motorcyclist
+      [255, 0, 255], # person
+      [0, 128, 128], # bicyclist
+      [128, 128, 0], # motorcyclist
       [128, 128, 128], # road
       [255, 192, 203], # parking
       [211, 211, 211], # sidewalk
       [165, 42, 42], # other-ground
       [255, 215, 0], # building
-      [139, 69, 19], # fence
-      [34, 139, 34], # vegetation
+      [255, 0, 0], # fence
+      [173, 255, 47], # vegetation
       [160, 82, 45], # trunk
-      [173, 255, 47], # terrain
+      [34, 139, 34], # terrain
       [112, 128, 144], # pole
       [220, 20, 60], # traffic-sign
     ]
@@ -110,7 +110,7 @@ semantic_kitti:
     [
       "car",
       "bicycle",
-      "motorcycyle",
+      "motorcyle",
       "truck",
       "other vehicle",
       "person",
