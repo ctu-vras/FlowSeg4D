@@ -78,6 +78,64 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
             time.sleep(config["fps"] - (duration // 1000000))
 
 
+def visualize_frame(config: dict, pcd_dir: str, labels_dir: str, frame: int) -> None:
+    pcd_files = sorted(os.listdir(pcd_dir))
+    lab_files = sorted(os.listdir(labels_dir))
+    assert len(pcd_files) == len(lab_files), (
+        f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
+    )
+
+    if config["dataset"] == "semantic_kitti":
+        sem_kitti_conf = load_config("configs/semantic-kitti.yaml")
+        mapper = np.vectorize(sem_kitti_conf["learning_map"].__getitem__)
+
+    for i, item in enumerate(zip(pcd_files, lab_files)):
+        if i < frame:
+            continue
+        elif i > frame + 4:
+            break
+
+        pcd_file, lab_file = item
+        if config["dataset"] == "pone":
+            points = np.load(os.path.join(pcd_dir, pcd_file))["pcd"][:, :3]
+        elif config["dataset"] == "semantic_kitti":
+            points = np.fromfile(
+                os.path.join(pcd_dir, pcd_file), dtype=np.float32
+            ).reshape(-1, 4)[:, :3]
+        else:
+            raise ValueError(f"Dataset {config['dataset']} not supported.")
+
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+
+        # Load labels
+        if config["instances"]:
+            labels = (
+                np.fromfile(os.path.join(labels_dir, lab_file), dtype=np.uint32)
+                & 0xFFFF0000
+            )
+            labels = (labels >> 16).astype(np.int16)
+        else:
+            labels = (
+                np.fromfile(os.path.join(labels_dir, lab_file), dtype=np.uint32)
+                & 0xFFFF
+            ).astype(np.int16)
+            if config["dataset"] == "semantic_kitti":
+                labels = mapper(labels) - 1
+
+        # Assign colors based on labels
+        if config["colors"] is None or config["instances"]:
+            colors = plt.get_cmap("hsv")((labels % MAX_INST) / MAX_INST)
+            colors[labels == 0] = 0
+        else:
+            colors = config["colors"][labels]
+            colors[labels == -1] = 0
+        pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
+
+        # Visualize the point cloud
+        o3d.visualization.draw_geometries([pcd])
+
+
 def visualize_pcd(
     pcd_in: Union[torch.Tensor, np.ndarray, o3d.geometry.PointCloud],
     labels: Optional[np.ndarray] = None,

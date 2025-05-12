@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from utils.misc import load_config
-from utils.visualization import visualize_scene
+from utils.visualization import visualize_scene, visualize_frame
 
 
 def parse_args():
@@ -24,15 +24,21 @@ def parse_args():
         help="Directory containing label files.",
     )
     parser.add_argument(
-        "--dataset", type=str, default="pone", help="What dataset config to use"
-    )
-    parser.add_argument(
         "--instances",
         action="store_true",
         help="Flag to indicate if instance labels are used.",
     )
     parser.add_argument(
+        "--dataset", type=str, default="pone", help="What dataset config to use"
+    )
+    parser.add_argument(
         "--fps", type=int, default=None, help="Frames per second for visualization."
+    )
+    parser.add_argument(
+        "--frame",
+        type=int,
+        default=None,
+        help="Frame number to visualize. Visualize this frame and five frames after.",
     )
     return parser.parse_args()
 
@@ -68,12 +74,15 @@ if __name__ == "__main__":
     if args.fps is not None:
         config["fps"] = args.fps
 
-    if not config["instances"] and config["colors"] is not None:
-        show_legend(config["colors"], config["names"])
+    if args.frame is None:
+        if not config["instances"] and config["colors"] is not None:
+            show_legend(config["colors"], config["names"])
 
-    try:
-        visualize_scene(config, args.pcd_dir, args.labels_dir)
-    except KeyboardInterrupt:
-        print("Keyboard interrupt detected. Exiting...")
-    except Exception as e:
-        raise e
+        try:
+            visualize_scene(config, args.pcd_dir, args.labels_dir)
+        except KeyboardInterrupt:
+            print("Keyboard interrupt detected. Exiting...")
+        except Exception as e:
+            raise e
+    else:
+        visualize_frame(config, args.pcd_dir, args.labels_dir, args.frame)
