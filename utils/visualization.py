@@ -74,8 +74,8 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
         vis.poll_events()
         vis.update_renderer()
         duration = time.time_ns() - start_time
-        if (duration // 1000000) < config["fps"]:
-            time.sleep(config["fps"] - (duration // 1000000))
+        if (duration / 1000000000) < 1 / config["fps"]:
+            time.sleep(1 / config["fps"] - (duration / 1000000000))
 
 
 def visualize_frame(config: dict, pcd_dir: str, labels_dir: str, frame: int) -> None:
