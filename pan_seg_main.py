@@ -80,12 +80,6 @@ def parse_args():
         help="Do not use long association",
     )
     parser.add_argument(
-        "--ablation",
-        type=float,
-        default=None,
-        help="Value of ablation parameter"
-    )
-    parser.add_argument(
         "--gpu", default=None, type=int, help="Set to a number of gpu to use"
     )
     parser.add_argument(
@@ -121,8 +115,10 @@ if __name__ == "__main__":
     config_model = load_config(config_panseg[args.dataset]["config_downstream"])
 
     process_configs(args, config_panseg, config_pretrain, config_model)
-    if args.ablation is not None:
-        config_panseg["association"]["life"] = args.ablation
+    # config_panseg["association"]["life"] = 6
+    # config_panseg["association"]["max_dist"] = 4.5
+    # config_panseg["association"]["max_feat"] = 0.4
+    # config_panseg["association"]["alpha"] = 0.1
     config_msg = print_config(args, config_panseg)
     if args.save_path is not None:
         if not os.path.exists(args.save_path):

@@ -293,22 +293,24 @@ class PanSegmenter:
         self.prev_scene = data["scene"]
         times.append(time.time())
 
-        if args.verbose:
+        if self.args.verbose:
             print(
                 f"Total time: {times[-1] - times[0]:.2f} s\n"
                 f"  SemSeg data prep: {times[1] - times[0]:.2f} | "
                 f"Semantic segmentation: {times[2] - times[1]:.2f} | "
                 f"InsSeg data prep: {times[3] - times[2]:.2f} | "
-                f"Instance segmentation: {times[4] - times[3]:.2f} | "
+                f"Instance association: {times[4] - times[3]:.2f} | "
             )
 
         src_pred = src_pred.cpu().numpy().squeeze()
         ind_src = ind_src.cpu().numpy()
 
         # save segmentation files
-        if args.save_path is not None:
+        if self.args.save_path is not None:
+            if self.args.dataset == "semantic_kitti":
+                src_pred = self.mapper(src_pred)
             save_data(
-                args.save_path,
+                self.args.save_path,
                 data["scene"]["name"],
                 data["sample"],
                 src_pred,

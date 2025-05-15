@@ -82,12 +82,14 @@ class Clusterer:
                 )
 
         # keep only the top clusters
-        lbls, counts = np.unique(labels, return_counts=True)
+        labels = torch.tensor(labels, dtype=torch.int64, device=points.device)
+
+        lbls, counts = torch.unique(labels, return_counts=True)
         valid_mask = lbls != -1
-        cluster_info = np.vstack((lbls[valid_mask], counts[valid_mask])).T
-        cluster_info = cluster_info[cluster_info[:, 1].argsort()[::-1]]
+        cluster_info = torch.stack((lbls[valid_mask], counts[valid_mask]), dim=1)
+        cluster_info = cluster_info[torch.argsort(cluster_info[:, 1], descending=True)]
 
-        clusters_labels = cluster_info[: self.config["clustering"]["num_clusters"], 0]
-        labels[~np.isin(labels, clusters_labels)] = -1
+        clusters_labels = cluster_info[:self.config["clustering"]["num_clusters"], 0]
+        labels[~torch.isin(labels, clusters_labels)] = -1
 
-        return torch.tensor(labels, dtype=torch.int64, device=points.device)
+        return labels
