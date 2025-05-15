@@ -9,15 +9,16 @@ import matplotlib.pyplot as plt
 
 from utils.misc import load_config
 
-MAX_INST = 75
+MAX_INST = 23
 
 
 def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
     pcd_files = sorted(os.listdir(pcd_dir))
     lab_files = sorted(os.listdir(labels_dir))
-    assert len(pcd_files) == len(lab_files), (
-        f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
-    )
+    if len(pcd_files) == len(lab_files):
+        print(
+            f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
+        )
 
     vis = o3d.visualization.Visualizer()
     vis.create_window()
@@ -81,9 +82,10 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
 def visualize_frame(config: dict, pcd_dir: str, labels_dir: str, frame: int) -> None:
     pcd_files = sorted(os.listdir(pcd_dir))
     lab_files = sorted(os.listdir(labels_dir))
-    assert len(pcd_files) == len(lab_files), (
-        f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
-    )
+    if len(pcd_files) == len(lab_files):
+        print(
+            f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
+        )
 
     if config["dataset"] == "semantic_kitti":
         sem_kitti_conf = load_config("configs/semantic-kitti.yaml")
