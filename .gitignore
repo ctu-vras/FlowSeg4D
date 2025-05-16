@@ -5,6 +5,7 @@
 *.pdf
 *.out
 *.pck
+*.zip
 
 .DS_Store
 

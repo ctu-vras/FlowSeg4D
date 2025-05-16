@@ -15,7 +15,7 @@ MAX_INST = 23
 def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
     pcd_files = sorted(os.listdir(pcd_dir))
     lab_files = sorted(os.listdir(labels_dir))
-    if len(pcd_files) == len(lab_files):
+    if len(pcd_files) != len(lab_files):
         print(
             f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
         )
@@ -82,7 +82,7 @@ def visualize_scene(config: dict, pcd_dir: str, labels_dir: str) -> None:
 def visualize_frame(config: dict, pcd_dir: str, labels_dir: str, frame: int) -> None:
     pcd_files = sorted(os.listdir(pcd_dir))
     lab_files = sorted(os.listdir(labels_dir))
-    if len(pcd_files) == len(lab_files):
+    if len(pcd_files) != len(lab_files):
         print(
             f"Mismatch between point cloud (num: {len(pcd_files)}) and label files (num: {len(lab_files)})."
         )
