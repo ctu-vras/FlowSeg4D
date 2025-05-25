@@ -115,7 +115,7 @@ The class is called with a dictionary containing:
 Run the demo with:
 
 ```bash
-python pan_seg_continuous.py --dataset DATASET --path_dataset PATH_DATASET [--config_pretrain CONFIG_PRETRAIN] [--config_downstream CONFIG_DOWNSTREAM] [--pretrained_ckpt PRETRAINED_CKPT] [--gpu GPU] [--save_path SAVE_PATH] [--clustering CLUSTERING] [--short] [--verbose]
+python pan_seg_continuous.py --dataset DATASET --path_dataset PATH_DATASET [--pretrained_ckpt PRETRAINED_CKPT] [--gpu GPU] [--save_path SAVE_PATH] [--clustering CLUSTERING] [--short] [--verbose]
 ```
 
 Supported datasets: *PONE*, *SemanticKITTI*.
